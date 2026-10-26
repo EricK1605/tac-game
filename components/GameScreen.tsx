@@ -1,15 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { BookOpen, Crown, Home, RotateCcw, Trophy, Volume2, VolumeX } from "lucide-react";
+import { useEffect } from "react";
+import { AnimatePresence, motion, useAnimationControls } from "framer-motion";
+import { BookOpen, Home, RotateCcw, Trophy, Volume2, VolumeX } from "lucide-react";
 import type { GameState } from "@/types/game";
 import { useGameStore } from "@/store/gameStore";
 import { PLAYER_COLORS, TEAM_NAMES, isHome, teamOf } from "@/lib/engine/constants";
 import { decider } from "@/lib/engine/moves";
-import { SEAT_POS } from "@/lib/layout";
+import { haptics } from "@/lib/haptics";
+import { EmoteButton, FxOverlay, PlayerPortrait, SidebarDrawer } from "./Arena";
 import { Board } from "./Board";
-import { CardBack, CardFace } from "./CardView";
+import { CardFace } from "./CardView";
+import { Character } from "./Character";
 import { HandArea } from "./HandArea";
 import { Sidebar } from "./Sidebar";
 import { useTurnControls } from "./useTurnControls";
@@ -27,16 +29,31 @@ export function GameScreen() {
   const controls = useTurnControls();
 
   const active = game.phase === "play" ? decider(game) : null;
+  const fx = useGameStore((s) => s.fx);
+  const shake = useAnimationControls();
+
+  // Brett wackelt bei Rauswürfen und beim Spielende
+  useEffect(() => {
+    if (!fx || (fx.kind !== "kick" && fx.kind !== "win")) return;
+    const strong = fx.kind === "win" || fx.victims.includes(0);
+    const a = strong ? 12 : 7;
+    shake.start({ x: [0, -a, a, -a * 0.6, a * 0.6, -a * 0.3, 0], y: [0, a * 0.4, -a * 0.4, a * 0.2, 0], transition: { duration: 0.45 } });
+  }, [fx?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Kurzes Vibrieren, wenn du dran bist
+  useEffect(() => {
+    if (controls.humanTurn) haptics.turn();
+  }, [controls.humanTurn, game.current]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex min-h-dvh flex-col">
       {/* Kopfzeile */}
       <header className="flex items-center justify-between gap-2 px-3 py-2 sm:px-5">
         <div className="flex items-center gap-3">
-          <span className="font-serif text-2xl font-black tracking-tight text-amber-100 drop-shadow">
+          <span className="font-display text-stroke-lg text-3xl text-amber-200">
             T<span className="text-red-500">A</span>C
           </span>
-          <span className="hidden rounded-full bg-black/30 px-2.5 py-1 text-xs text-amber-100/70 sm:inline">
+          <span className="font-display hidden rounded-lg border-2 border-[#1b1630] bg-black/40 px-2.5 py-1 text-xs text-amber-100/90 sm:inline">
             Runde {game.dealNumber} · {DIFF_LABEL[settings.difficulty]}
             {game.master ? " · Meisterversion" : ""}
           </span>
@@ -55,10 +72,10 @@ export function GameScreen() {
         </div>
       </header>
 
-      <main className="mx-auto grid w-full max-w-[1500px] flex-1 grid-cols-1 gap-4 px-2 pb-3 sm:px-4 lg:grid-cols-[1fr_340px]">
+      <main className="mx-auto grid w-full max-w-[1500px] flex-1 grid-cols-1 gap-4 px-2 pb-20 sm:px-4 lg:grid-cols-[1fr_340px] lg:pb-3">
         <div className="flex min-w-0 flex-col items-center gap-2">
           <TeamScore game={game} />
-          <div className="w-full max-w-[min(92vw,calc(100dvh-370px))] min-w-[300px]">
+          <motion.div animate={shake} className="relative w-full max-w-[min(92vw,calc(100dvh-370px))] min-w-[300px]">
             <Board
               marbles={controls.displayBoard}
               anim={anim}
@@ -72,20 +89,23 @@ export function GameScreen() {
                 <>
                   <CenterPile game={game} />
                   {[0, 1, 2, 3].map((p) => (
-                    <SeatBadge key={p} game={game} player={p} active={active === p} />
+                    <PlayerPortrait key={p} game={game} player={p} active={active === p} />
                   ))}
+                  <FxOverlay game={game} />
                 </>
               }
             />
-          </div>
+          </motion.div>
           <HandArea game={game} controls={controls} />
         </div>
 
-        <aside className="h-[420px] lg:h-[calc(100dvh-80px)] lg:sticky lg:top-2">
+        <aside className="hidden lg:sticky lg:top-2 lg:block lg:h-[calc(100dvh-80px)]">
           <Sidebar game={game} />
         </aside>
       </main>
 
+      <EmoteButton />
+      <SidebarDrawer game={game} />
       <AnimatePresence>{game.phase === "gameOver" && <GameOverModal game={game} />}</AnimatePresence>
     </div>
   );
@@ -94,10 +114,13 @@ export function GameScreen() {
 function IconButton({ children, onClick, label }: { children: React.ReactNode; onClick: () => void; label: string }) {
   return (
     <button
-      onClick={onClick}
+      onClick={() => {
+        haptics.tap();
+        onClick();
+      }}
       title={label}
       aria-label={label}
-      className="flex items-center gap-1.5 rounded-full bg-black/30 px-3 py-2 text-sm font-medium text-amber-100 ring-1 ring-amber-200/15 transition hover:bg-black/50"
+      className="chunky-btn chunky-dark flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm"
     >
       {children}
     </button>
@@ -122,63 +145,6 @@ function TeamScore({ game }: { game: GameState }) {
           </span>
         </div>
       ))}
-    </div>
-  );
-}
-
-function SeatBadge({ game, player, active }: { game: GameState; player: number; active: boolean }) {
-  const p = game.players[player];
-  const col = PLAYER_COLORS[player];
-  const chat = useGameStore((s) => s.chat);
-  const last = [...chat].reverse().find((m) => m.player === player);
-  const [bubble, setBubble] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!last || Date.now() - last.time > 4000) return;
-    setBubble(last.text);
-    const t = setTimeout(() => setBubble(null), 3200);
-    return () => clearTimeout(t);
-  }, [last?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const pos = SEAT_POS[player];
-  const vertical = player === 1 || player === 3;
-  const skipped = active && game.skipPending;
-  return (
-    <div className="pointer-events-none absolute -translate-x-1/2 -translate-y-1/2" style={{ left: pos.left, top: pos.top }}>
-      <motion.div
-        animate={active ? { scale: [1, 1.05, 1] } : { scale: 1 }}
-        transition={active ? { repeat: Infinity, duration: 1.6 } : {}}
-        className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-semibold shadow-lg ring-2 backdrop-blur sm:text-xs ${
-          active ? "bg-amber-100 text-amber-950" : "bg-black/60 text-amber-50"
-        } ${vertical ? "flex-col rounded-2xl px-1.5 py-2" : ""}`}
-        style={{ boxShadow: active ? `0 0 18px ${col.hex}` : undefined, borderColor: col.hex, ["--tw-ring-color" as string]: col.hex }}
-      >
-        <span className="h-2.5 w-2.5 rounded-full" style={{ background: col.hex }} />
-        <span className={vertical ? "[writing-mode:vertical-rl] rotate-180" : ""}>{p.name}</span>
-        {teamOf(player) === 0 && player !== 0 && <Crown className="h-3 w-3 text-emerald-500" aria-label="Partner" />}
-        {player !== 0 && (
-          <span className={`flex ${vertical ? "flex-col -space-y-3" : "-space-x-2"}`}>
-            {p.hand.map((c) => (
-              <CardBack key={c.id} mini className="h-4 w-3 !rounded-[2px] ring-1 ring-black/30" />
-            ))}
-          </span>
-        )}
-        {skipped && <span className="rounded bg-red-600 px-1 text-[10px] text-white">setzt aus</span>}
-      </motion.div>
-      <AnimatePresence>
-        {bubble && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.7, y: 6 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            className={`absolute z-20 w-max max-w-[160px] rounded-2xl bg-white px-3 py-1.5 text-xs font-medium text-stone-800 shadow-xl ${
-              player === 0 ? "bottom-full left-1/2 mb-2 -translate-x-1/2" : player === 2 ? "left-1/2 top-full mt-2 -translate-x-1/2" : player === 1 ? "left-full top-1/2 ml-2 -translate-y-1/2" : "right-full top-1/2 mr-2 -translate-y-1/2"
-            }`}
-          >
-            {bubble}
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
@@ -235,22 +201,35 @@ function GameOverModal({ game }: { game: GameState }) {
         transition={{ type: "spring", stiffness: 200, damping: 18, delay: 0.6 }}
         className="w-full max-w-md rounded-3xl border border-amber-200/30 bg-gradient-to-b from-[#3b2414] to-[#1c120b] p-8 text-center shadow-2xl"
       >
-        <motion.div animate={{ rotate: [0, -8, 8, 0] }} transition={{ repeat: Infinity, duration: 2.4 }} className="mx-auto mb-4 w-fit">
-          <Trophy className={`h-16 w-16 ${won ? "text-amber-300 drop-shadow-[0_0_20px_#fcd34d]" : "text-stone-400"}`} />
-        </motion.div>
-        <h2 className="font-serif text-3xl font-black text-amber-50">{won ? "Gewonnen!" : "Verloren"}</h2>
+        <div className="mb-4 flex items-end justify-center gap-2">
+          <MoodLoop player={game.winner ?? 0} won />
+          <motion.div animate={{ rotate: [0, -8, 8, 0] }} transition={{ repeat: Infinity, duration: 2.4 }}>
+            <Trophy className={`h-16 w-16 ${won ? "text-amber-300 drop-shadow-[0_0_20px_#fcd34d]" : "text-stone-400"}`} />
+          </motion.div>
+          <MoodLoop player={(game.winner ?? 0) + 2} won />
+        </div>
+        <h2 className="font-display text-stroke-lg text-5xl text-amber-200">{won ? "Gewonnen!" : "Verloren"}</h2>
         <p className="mt-2 text-amber-100/70">
           {TEAM_NAMES[game.winner ?? 0]} hat alle acht Kugeln nach Hause gebracht{won ? " – starkes Teamspiel!" : "."}
         </p>
         <div className="mt-6 flex justify-center gap-3">
-          <button onClick={() => start(settings)} className="flex items-center gap-2 rounded-full bg-gradient-to-b from-amber-300 to-amber-500 px-5 py-2.5 font-bold text-amber-950 shadow-lg hover:from-amber-200">
+          <button onClick={() => start(settings)} className="chunky-btn chunky-green flex items-center gap-2 rounded-2xl px-6 py-3 text-lg">
             <RotateCcw className="h-4 w-4" /> Nochmal
           </button>
-          <button onClick={quit} className="rounded-full bg-black/30 px-5 py-2.5 font-semibold text-amber-100 ring-1 ring-amber-200/20 hover:bg-black/50">
+          <button onClick={quit} className="chunky-btn chunky-dark rounded-2xl px-6 py-3 text-lg">
             Hauptmenü
           </button>
         </div>
       </motion.div>
+    </motion.div>
+  );
+}
+
+/** Figur, die im Abschlussdialog immer wieder jubelt. */
+function MoodLoop({ player, won }: { player: number; won: boolean }) {
+  return (
+    <motion.div animate={{ y: [0, -14, 0] }} transition={{ repeat: Infinity, duration: 0.9, ease: "easeOut", delay: player * 0.15 }}>
+      <Character player={player} mood={won ? "happy" : "sad"} size={72} />
     </motion.div>
   );
 }

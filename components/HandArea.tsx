@@ -6,6 +6,7 @@ import type { Card, GameState, Move } from "@/types/game";
 import { useGameStore } from "@/store/gameStore";
 import { CARD_HINT, PLAYER_COLORS, cardLabel, partnerOf } from "@/lib/engine/constants";
 import { decider } from "@/lib/engine/moves";
+import { haptics } from "@/lib/haptics";
 import { CardFace } from "./CardView";
 import type { useTurnControls } from "./useTurnControls";
 
@@ -43,7 +44,7 @@ export function HandArea({ game, controls }: { game: GameState; controls: Contro
         )}
         {seven && (
           <>
-            <span className="rounded-full bg-red-900/60 px-3 py-1.5 text-sm font-bold text-amber-100 ring-1 ring-red-400/40">
+            <span className="font-display text-stroke rounded-xl border-[3px] border-[#1b1630] bg-gradient-to-b from-red-500 to-red-800 px-3 py-1.5 text-sm text-white">
               7er: noch {seven.remaining} {seven.remaining === 1 ? "Schritt" : "Schritte"}
             </span>
             {seven.segments.length > 0 && (
@@ -59,7 +60,7 @@ export function HandArea({ game, controls }: { game: GameState; controls: Contro
       </div>
 
       {foreignHand && (
-        <div className="text-xs font-semibold uppercase tracking-wider text-red-300">
+        <div className="font-display text-stroke text-sm uppercase tracking-wider text-red-300">
           <Flame className="mr-1 inline h-3.5 w-3.5" /> Karten von {game.players[owner].name}
         </div>
       )}
@@ -84,9 +85,10 @@ export function HandArea({ game, controls }: { game: GameState; controls: Contro
                 }}
                 exit={{ y: -220, opacity: 0, scale: 0.7, transition: { duration: 0.3 } }}
                 whileHover={playable ? { y: selected ? -30 : -14, scale: 1.05 } : undefined}
+                whileTap={playable ? { scale: 0.94 } : { x: [0, -4, 4, -2, 0], transition: { duration: 0.25 } }}
                 transition={{ type: "spring", stiffness: 260, damping: 24 }}
-                onClick={() => playable && selectCard(c.id)}
-                disabled={!playable}
+                onClick={() => (playable ? selectCard(c.id) : haptics.tap())}
+                aria-disabled={!playable}
                 className={`relative -mx-2 origin-bottom sm:-mx-1.5 ${playable ? "cursor-pointer" : "cursor-not-allowed"}`}
                 style={{ zIndex: selected ? 50 : i }}
                 aria-label={`Karte ${cardLabel(c.value)}`}
@@ -106,7 +108,7 @@ function InstructionBar({ game, controls }: { game: GameState; controls: Control
   const selectedCardId = useGameStore((s) => s.selectedCardId);
   const thinking = useGameStore((s) => s.thinking);
   let text: string;
-  let tone = "bg-black/40 text-amber-50";
+  let tone = "bg-black/50 text-amber-50 border-black/60";
   const owner = controls.humanTurn ? controls.handOwner : 0;
   const card = game.players[owner].hand.find((c) => c.id === selectedCardId);
 
@@ -114,14 +116,14 @@ function InstructionBar({ game, controls }: { game: GameState; controls: Control
     text = game.swapSelections[0]
       ? "Warte auf die anderen Spieler…"
       : `Tauschen: Wähle eine Karte für deinen Partner ${game.players[partnerOf(0)].name}`;
-    tone = "bg-emerald-900/60 text-emerald-50 ring-1 ring-emerald-400/40";
+    tone = "bg-gradient-to-b from-emerald-500 to-emerald-800 text-white border-[#1b1630]";
   } else if (game.phase === "gameOver") {
     text = "Spiel beendet";
   } else if (!controls.humanTurn) {
     const d = decider(game);
     text = `${game.players[d].name} ist am Zug${thinking ? " …" : ""}`;
   } else {
-    tone = "bg-amber-500/25 text-amber-50 ring-1 ring-amber-300/50";
+    tone = "bg-gradient-to-b from-amber-400 to-orange-600 text-white border-[#1b1630]";
     if (game.pendingWin !== null) text = "Das gegnerische Team ist fertig – nur dein TAC kann den Sieg noch verhindern!";
     else if (game.subTurn?.type === "devil") text = `Teufel: Spiele eine Karte von ${game.players[game.subTurn.target].name} für ${game.players[game.subTurn.target].name}`;
     else if (game.subTurn?.type === "jester") text = "Narr: Spiele sofort eine deiner neuen Karten";
@@ -136,9 +138,10 @@ function InstructionBar({ game, controls }: { game: GameState; controls: Control
   return (
     <motion.div
       key={text}
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={`max-w-[95vw] rounded-full px-4 py-1.5 text-center text-sm font-medium shadow-lg backdrop-blur ${tone}`}
+      initial={{ opacity: 0, y: 6, scale: 0.92 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ type: "spring", stiffness: 500, damping: 26 }}
+      className={`font-display text-stroke max-w-[95vw] rounded-xl border-[3px] px-4 py-1.5 text-center text-sm shadow-[0_3px_0_rgba(0,0,0,0.4)] sm:text-[15px] ${tone}`}
     >
       {!controls.humanTurn && game.phase === "play" && <Hourglass className="mr-1.5 inline h-3.5 w-3.5 animate-spin [animation-duration:2s]" />}
       {text}
@@ -204,16 +207,14 @@ function ActionButton({
 }) {
   return (
     <motion.button
-      whileHover={{ scale: 1.04 }}
-      whileTap={{ scale: 0.96 }}
-      onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold shadow-lg ring-1 transition ${
-        danger
-          ? "bg-red-800/80 text-red-50 ring-red-400/50 hover:bg-red-700"
-          : primary
-            ? "bg-gradient-to-b from-amber-300 to-amber-500 text-amber-950 ring-amber-200 hover:from-amber-200"
-            : "bg-[#3b2414]/80 text-amber-100 ring-amber-200/30 hover:bg-[#4a2e19]"
-      }`}
+      initial={{ scale: 0.6, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ type: "spring", stiffness: 500, damping: 20 }}
+      onClick={() => {
+        haptics.tap();
+        onClick();
+      }}
+      className={`chunky-btn flex items-center gap-1.5 rounded-xl px-4 py-2 text-sm sm:text-base ${danger ? "chunky-red" : primary ? "chunky-green" : "chunky-dark"}`}
     >
       {icon}
       {children}

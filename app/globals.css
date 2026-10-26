@@ -28,3 +28,68 @@ body {
   background: rgba(253, 230, 190, 0.18);
   border-radius: 8px;
 }
+
+@utility font-display {
+  font-family: var(--font-display), var(--font-geist-sans), system-ui, sans-serif;
+  letter-spacing: 0.02em;
+}
+
+/* Comic-Kontur um Schrift */
+@utility text-stroke {
+  text-shadow:
+    -1px -1px 0 #1b1630, 1px -1px 0 #1b1630, -1px 1px 0 #1b1630, 1px 1px 0 #1b1630,
+    0 2px 0 #1b1630;
+}
+@utility text-stroke-lg {
+  -webkit-text-stroke: 3px #1b1630;
+  paint-order: stroke fill;
+}
+
+/* Dicke 3D-Knöpfe, die sich beim Drücken „eindrücken“ */
+@utility chunky-btn {
+  font-family: var(--font-display), system-ui, sans-serif;
+  color: #fff;
+  border: 3px solid #1b1630;
+  box-shadow:
+    inset 0 -5px 0 rgba(0, 0, 0, 0.28),
+    inset 0 3px 0 rgba(255, 255, 255, 0.45),
+    0 4px 0 #1b1630;
+  text-shadow: 0 2px 0 #1b1630;
+  transition:
+    transform 80ms,
+    box-shadow 80ms,
+    filter 120ms;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  &:hover {
+    filter: brightness(1.08);
+  }
+  &:active {
+    transform: translateY(3px);
+    box-shadow:
+      inset 0 -2px 0 rgba(0, 0, 0, 0.28),
+      inset 0 2px 0 rgba(255, 255, 255, 0.35),
+      0 1px 0 #1b1630;
+  }
+}
+@utility chunky-gold {
+  background: linear-gradient(#ffe27a, #ffb21e 55%, #f08c00);
+}
+@utility chunky-blue {
+  background: linear-gradient(#7fb2ff, #3b7cf0 55%, #2552b8);
+}
+@utility chunky-green {
+  background: linear-gradient(#a6f07a, #4cc23a 55%, #2f8f22);
+}
+@utility chunky-red {
+  background: linear-gradient(#ff8f8f, #e8413c 55%, #b3201c);
+}
+@utility chunky-dark {
+  background: linear-gradient(#6b5a8f, #3f3463 55%, #2a2245);
+}
+
+/* Kein Doppeltipp-Zoom / Text-Markieren beim schnellen Spielen auf dem Handy */
+button {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}

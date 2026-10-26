@@ -8,6 +8,8 @@ import { boardKey, lockedSet } from "@/lib/engine/board";
 import { BASE, isHome, partnerOf, teamOf } from "@/lib/engine/constants";
 import { botComment, chooseMove, chooseSwapCard } from "@/lib/ai/botEngine";
 import { setSoundEnabled, sfx } from "@/lib/audio";
+import { haptics } from "@/lib/haptics";
+import type { Mood } from "@/components/Character";
 
 export const STEP_MS = 95;
 
@@ -26,6 +28,23 @@ export interface SevenBuilder {
   locked: number[];
 }
 
+export interface Emote {
+  id: number;
+  player: number;
+  emoji: string;
+  time: number;
+}
+
+/** Große Effekt-Einblendung (Kick, Haus, TAC, Sieg). */
+export interface FxEvent {
+  id: number;
+  kind: "kick" | "home" | "tac" | "win";
+  player: number;
+  victims: number[];
+}
+
+export const EMOTES = ["👍", "😂", "😎", "🔥", "👏", "😭", "😡", "😱", "🤔", "🙏"];
+
 interface Store {
   settings: GameSettings;
   sound: boolean;
@@ -37,6 +56,10 @@ interface Store {
   chat: ChatMessage[];
   showRules: boolean;
   thinking: boolean;
+  moods: { mood: Mood; until: number }[];
+  emotes: Emote[];
+  fx: FxEvent | null;
+  drawerOpen: boolean;
 
   start: (settings: GameSettings) => void;
   quit: () => void;
@@ -49,11 +72,16 @@ interface Store {
   say: (text: string) => void;
   toggleSound: () => void;
   setShowRules: (v: boolean) => void;
+  emote: (emoji: string, player?: number) => void;
+  setDrawerOpen: (v: boolean) => void;
 }
 
 let botTimer: ReturnType<typeof setTimeout> | null = null;
 let chatId = 0;
 let animKey = 0;
+let fxId = 0;
+const idleMoods = () => [0, 1, 2, 3].map(() => ({ mood: "idle" as Mood, until: 0 }));
+const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)];
 
 function animDuration(move: Move | null): number {
   if (!move) return 0;
@@ -67,9 +95,59 @@ export const useGameStore = create<Store>()((set, get) => {
     set((s) => ({ chat: [...s.chat.slice(-40), msg] }));
   };
 
+  const setMood = (player: number, mood: Mood, ms = 1800) =>
+    set((s) => {
+      const moods = [...s.moods];
+      moods[player] = { mood, until: Date.now() + ms };
+      return { moods };
+    });
+
+  const addEmote = (player: number, emoji: string) =>
+    set((s) => ({ emotes: [...s.emotes.slice(-20), { id: chatId++, player, emoji, time: Date.now() }] }));
+
+  /** Figuren reagieren: Jubel beim Kick, Trauer beim Rauswurf, Effekte für Haus/TAC/Sieg. */
+  const celebrate = (before: GameState, move: Move, after: GameState, delayMs: number) => {
+    const mover = before.subTurn ? before.subTurn.actor : before.current;
+    const victims = [...new Set(move.captured.map((id) => before.marbles[id].color))];
+    const enemyVictims = victims.filter((c) => teamOf(c) !== teamOf(mover));
+    const card = before.players[move.handOwner].hand.find((c) => c.id === move.cardId);
+    const newHome = move.board.some((m) => isHome(m.pos) && !isHome(before.marbles[m.id].pos));
+    setTimeout(() => {
+      if (after.phase === "gameOver" && after.winner !== null) {
+        set({ fx: { id: fxId++, kind: "win", player: after.winner, victims: [] } });
+        for (const p of [0, 1, 2, 3]) setMood(p, teamOf(p) === after.winner ? "happy" : "sad", 6000);
+        haptics.win();
+        return;
+      }
+      if (victims.length) {
+        haptics.capture();
+        for (const v of victims) if (v !== mover) setMood(v, Math.random() < 0.5 ? "sad" : "angry", 2200);
+        if (enemyVictims.length) {
+          setMood(mover, "happy", 1600);
+          set({ fx: { id: fxId++, kind: "kick", player: mover, victims } });
+          if (mover !== 0 && Math.random() < 0.55) addEmote(mover, pick(["😎", "😂", "🔥"]));
+          for (const v of enemyVictims) if (v !== 0 && Math.random() < 0.5) setTimeout(() => addEmote(v, pick(["😭", "😡", "😱"])), 700);
+          if (teamOf(mover) === 0 && mover === 0 && Math.random() < 0.6) setTimeout(() => addEmote(partnerOf(0), pick(["👏", "🔥", "👍"])), 900);
+        }
+        return;
+      }
+      if (card?.value === "tac" && move.kind !== "discard") {
+        set({ fx: { id: fxId++, kind: "tac", player: mover, victims: [] } });
+        setMood(mover, "happy", 1200);
+        if (move.tacUndo) setMood(move.tacUndo.player, "angry", 1500);
+        return;
+      }
+      if (newHome) {
+        set({ fx: { id: fxId++, kind: "home", player: mover, victims: [] } });
+        setMood(mover, "happy", 1200);
+      }
+    }, delayMs);
+  };
+
   /** Bots kommentieren das Geschehen. */
   const react = (before: GameState, move: Move, after: GameState) => {
     const mover = before.subTurn ? before.subTurn.actor : before.current;
+    celebrate(before, move, after, Math.max(0, animDuration(move) - (move.captured.length ? 450 : 0)));
     const capturedOwners = [...new Set(move.captured.map((id) => before.marbles[id].color))];
     for (const owner of capturedOwners) {
       if (owner !== 0 && owner !== mover && Math.random() < 0.6) addChat(owner, botComment("gotCaptured"));
@@ -111,8 +189,7 @@ export const useGameStore = create<Store>()((set, get) => {
     playSounds(before, move, after);
     react(before, move, after);
     // Meldungen der Bots nach neuem Geben
-    if (after.dealNumber !== before.dealNumber)
-      for (const p of [1, 2, 3]) if (Math.random() < 0.8) addChat(p, after.announcements[p] ? "Ich kann! 👍" : "Ich kann nicht… 👎");
+    if (after.dealNumber !== before.dealNumber) announce(after);
     set({
       game: after,
       anim: { key: ++animKey, from: move.baseBoard ?? before.marbles, anims: move.anims, captured: move.captured },
@@ -121,6 +198,11 @@ export const useGameStore = create<Store>()((set, get) => {
       seven: null,
     });
     schedule(animDuration(move));
+  };
+
+  /** Melden nach dem Geben – als Daumen-Emote über den Figuren. */
+  const announce = (g: GameState) => {
+    for (const p of [1, 2, 3]) setTimeout(() => addEmote(p, g.announcements[p] ? "👍" : "👎"), 300 + p * 250);
   };
 
   const botSwaps = () => {
@@ -166,14 +248,18 @@ export const useGameStore = create<Store>()((set, get) => {
     chat: [],
     showRules: false,
     thinking: false,
+    moods: idleMoods(),
+    emotes: [],
+    fx: null,
+    drawerOpen: false,
 
     start: (settings) => {
       sfx.card();
       const game = newGame(settings);
       chatId = 0;
-      set({ settings, game, anim: null, selectedCardId: null, selectedMarble: null, seven: null, chat: [] });
+      set({ settings, game, anim: null, selectedCardId: null, selectedMarble: null, seven: null, chat: [], emotes: [], moods: idleMoods(), fx: null });
       addChat(2, `Hallo ${game.players[0].name}! Auf gute Zusammenarbeit 🤝`);
-      for (const p of [1, 2, 3]) addChat(p, game.announcements[p] ? "Ich kann! 👍" : "Ich kann nicht… 👎");
+      announce(game);
       schedule();
     },
 
@@ -200,12 +286,19 @@ export const useGameStore = create<Store>()((set, get) => {
         }
       }
       sfx.card();
+      haptics.tap();
       set({ selectedCardId: id, selectedMarble: null, seven });
     },
 
-    selectMarble: (id) => set({ selectedMarble: id }),
+    selectMarble: (id) => {
+      if (id !== null && id !== get().selectedMarble) haptics.select();
+      set({ selectedMarble: id });
+    },
 
-    playMove: (move) => commit(move),
+    playMove: (move) => {
+      haptics.drop();
+      commit(move);
+    },
 
     sevenStep: (seg) => {
       const { seven, game } = get();
@@ -257,6 +350,7 @@ export const useGameStore = create<Store>()((set, get) => {
       const g = get().game;
       if (!g || g.phase !== "swap") return;
       sfx.card();
+      haptics.drop();
       const after = selectSwap(g, 0, cardId);
       set({ game: after, selectedCardId: null });
       if (after.phase === "play") addChat(2, "Danke für die Karte! 🙏");
@@ -276,5 +370,17 @@ export const useGameStore = create<Store>()((set, get) => {
     },
 
     setShowRules: (v) => set({ showRules: v }),
+
+    emote: (emoji, player = 0) => {
+      haptics.tap();
+      addEmote(player, emoji);
+      if (player === 0 && Math.random() < 0.45) {
+        const answer: Record<string, string[]> = { "😂": ["😂", "😎"], "😡": ["😂", "🙏"], "😭": ["🙏", "😂"], "👍": ["👍"], "🔥": ["🔥", "😎"] };
+        const bot = pick([1, 2, 3]);
+        setTimeout(() => addEmote(bot, pick(answer[emoji] ?? ["👍", "🤔"])), 900 + Math.random() * 800);
+      }
+    },
+
+    setDrawerOpen: (v) => set({ drawerOpen: v }),
   };
 });
