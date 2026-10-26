@@ -1,36 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TAC – Online-Version
 
-## Getting Started
+Browser-Umsetzung des Team-Karten- und Brettspiels **TAC** mit KI-Gegnern. Die Regeln folgen dem offiziellen Regelheft *TACtik* (TAC Verlag, Auflage 2024).
 
-First, run the development server:
+## Starten
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run dev        # http://localhost:3000
+npm run simulate -- 100 hard,medium   # Bot gegen Bot (Engine-/KI-Test)
+npm run simulate -- 50 hard,easy master
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Aufbau
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Pfad | Inhalt |
+| --- | --- |
+| `types/game.ts` | Typen für Karten, Kugeln, Spieler, Züge, Spielzustand |
+| `lib/engine/constants.ts` | Deck (100 bzw. 104 Karten), Farben, Hilfsfunktionen |
+| `lib/engine/board.ts` | Belegung, Laufwege ohne Überspringen, Einzelschritte der 7, Einrasten |
+| `lib/engine/moves.ts` | Zuggenerierung für jede Karte inkl. 7-Aufteilung, Trickser, TAC, Meisterkarten |
+| `lib/engine/game.ts` | Ablauf: Geben, Melden, Tauschen, Züge, Aussetzen, Teufel/Narr, Sieg (inkl. TAC gegen Siegeszug) |
+| `lib/ai/botEngine.ts` | KI in drei Stufen |
+| `store/gameStore.ts` | Zustand-Store, Bot-Schleife, Sounds, Chat-Reaktionen |
+| `components/` | Brett (SVG + Framer Motion), Hand, Verlauf/Chat, Regelbuch, Startbildschirm |
+| `lib/audio.ts` | Soundeffekte per Web Audio API (synthetisch, keine Dateien) |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Die Engine ist rein funktional: `legalMoves(state)` liefert alle erlaubten Züge mit fertigem Ergebnisbrett, `applyMove(state, move)` erzeugt den nächsten Zustand. UI und Bots wählen nur aus dieser Liste – ungültige Züge sind damit ausgeschlossen.
 
-## Learn More
+## KI-Stufen
 
-To learn more about Next.js, take a look at the following resources:
+- **Leicht:** zufälliger gültiger Zug.
+- **Mittel:** priorisiert Schmeißen, Eröffnen und Ziehen ins Haus.
+- **Schwer:** zusätzlich Gefahrenanalyse (Abstände zu gegnerischen Kugeln, gegnerische Startfelder), TAC wird aufgehoben, wenn er wenig bringt, kluger Kartentausch mit dem Partner und Planung von Kartenkombinationen aus der eigenen Hand (z. B. eröffnen, dann mit der 4 rückwärts).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Ergebnisse aus Bot-gegen-Bot-Simulationen: Schwer schlägt Mittel in rund 63 % der Partien, Mittel schlägt Leicht in fast allen.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Regelentscheidungen
 
-## Deploy on Vercel
+Wo die Aufgabenbeschreibung vom offiziellen Regelheft abweicht, gilt das Regelheft:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- Gegeben werden je **5 Karten** (Meisterversion: letzte Ausgabe 6), nicht 5 → 4 → 3.
+- Wer nicht ziehen kann, legt **eine** Karte ab, nicht die ganze Hand.
+- **Engel/Teufel** wirken wie in der Meisterversion beschrieben (Engel eröffnet für den linken Nachbarn, Teufel spielt eine Karte des linken Nachbarn für ihn).
+- **8** lässt den nächsten Spieler aussetzen (er legt eine Karte ab oder kontert mit TAC).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Vereinfachung: Beim Teufel darf aus der fremden Hand weder TAC noch Teufel gewählt werden.
