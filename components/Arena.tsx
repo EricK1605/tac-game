@@ -362,7 +362,8 @@ export function EmoteButton() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.5, y: 20 }}
             transition={{ type: "spring", stiffness: 450, damping: 25 }}
-            className="absolute bottom-full left-0 mb-2 grid origin-bottom-left grid-cols-5 gap-1.5 rounded-2xl border-[3px] border-[#1b1630] bg-gradient-to-b from-[#5a76c9] to-[#2c3d78] p-2 shadow-[0_5px_0_rgba(0,0,0,0.45)]"
+            // w-max: sonst übernimmt das Raster die Breite des kleinen Knopfs und die Emojis liegen übereinander
+            className="absolute bottom-full left-0 mb-2 grid w-max origin-bottom-left grid-cols-5 gap-1.5 rounded-2xl border-[3px] border-[#1b1630] bg-gradient-to-b from-[#5a76c9] to-[#2c3d78] p-2 shadow-[0_5px_0_rgba(0,0,0,0.45)]"
           >
             {EMOTES.map((e, i) => (
               <motion.button
