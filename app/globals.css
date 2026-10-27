@@ -19,6 +19,19 @@ body {
     repeating-linear-gradient(92deg, rgba(255, 255, 255, 0.015) 0 2px, transparent 2px 9px),
     linear-gradient(160deg, #2a170b 0%, #1a0e06 55%, #120904 100%);
   background-attachment: fixed;
+  /* Fühlt sich auf dem Handy wie eine App an: kein Gummiband-Scrollen, kein Tipp-Blitz, kein Doppeltipp-Zoom */
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid #fde047;
+  outline-offset: 2px;
 }
 
 ::-webkit-scrollbar {

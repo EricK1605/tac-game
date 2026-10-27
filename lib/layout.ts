@@ -4,9 +4,11 @@ import type { Marble } from "@/types/game";
 
 export const SIZE = 1000;
 export const CENTER = 500;
-export const RING_R = 380;
-export const HOLE_R = 16;
-export const MARBLE_R = 14;
+export const RING_R = 408;
+export const HOLE_R = 18;
+export const MARBLE_R = 16.5;
+/** Abstand der vier Vorfeld-Mulden vom Vorfeld-Mittelpunkt */
+const BASE_SPREAD = 26;
 
 const rad = (deg: number) => (deg * Math.PI) / 180;
 
@@ -25,19 +27,19 @@ export function ringPoint(i: number): Pt {
 
 export function homePoint(color: number, idx: number): Pt {
   const a = rad(ringAngle(startOf(color)) + (idx + 1) * 4.2);
-  const r = RING_R - 52 * (idx + 1);
+  const r = RING_R - 54 * (idx + 1);
   return { x: CENTER + r * Math.cos(a), y: CENTER + r * Math.sin(a) };
 }
 
 export function baseCenter(color: number): Pt {
   const a = rad(ringAngle(startOf(color)) - 45);
-  return { x: CENTER + 545 * Math.cos(a), y: CENTER + 545 * Math.sin(a) };
+  return { x: CENTER + 560 * Math.cos(a), y: CENTER + 560 * Math.sin(a) };
 }
 
 export function basePoint(color: number, slot: number): Pt {
   const c = baseCenter(color);
-  const dx = slot % 2 === 0 ? -22 : 22;
-  const dy = slot < 2 ? -22 : 22;
+  const dx = slot % 2 === 0 ? -BASE_SPREAD : BASE_SPREAD;
+  const dy = slot < 2 ? -BASE_SPREAD : BASE_SPREAD;
   return { x: c.x + dx, y: c.y + dy };
 }
 

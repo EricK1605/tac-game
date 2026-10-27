@@ -34,9 +34,9 @@ export function HandArea({ game, controls }: { game: GameState; controls: Contro
 
   return (
     <div className="flex flex-col items-center gap-2">
-      <InstructionBar game={game} controls={controls} />
-
+      {/* Anweisung und Aktions-Knöpfe teilen sich eine Zeile, damit das Brett mehr Höhe bekommt */}
       <div className="flex min-h-[2.5rem] flex-wrap items-center justify-center gap-2">
+        <InstructionBar game={game} controls={controls} />
         {swapPhase && selectedCardId && !waitingForSwap && (
           <ActionButton onClick={() => chooseSwap(selectedCardId)} icon={<ArrowRightLeft className="h-4 w-4" />} primary>
             Karte an {game.players[partnerOf(0)].name} geben
@@ -65,7 +65,7 @@ export function HandArea({ game, controls }: { game: GameState; controls: Contro
         </div>
       )}
 
-      <div className="relative flex h-36 items-start justify-center pt-4 sm:h-40" style={{ perspective: 800 }}>
+      <div className="relative flex h-28 items-start justify-center pt-4 sm:h-32" style={{ perspective: 800 }}>
         <AnimatePresence initial={false}>
           {hand.map((c, i) => {
             const n = hand.length;
@@ -78,22 +78,22 @@ export function HandArea({ game, controls }: { game: GameState; controls: Contro
                 layout
                 initial={{ y: 120, opacity: 0, rotate: 0 }}
                 animate={{
-                  y: selected ? -26 : Math.abs(offset) * 6,
+                  y: selected ? -20 : Math.abs(offset) * 5,
                   rotate: offset * 5,
                   opacity: 1,
                   scale: selected ? 1.06 : 1,
                 }}
                 exit={{ y: -220, opacity: 0, scale: 0.7, transition: { duration: 0.3 } }}
-                whileHover={playable ? { y: selected ? -30 : -14, scale: 1.05 } : undefined}
+                whileHover={playable ? { y: selected ? -24 : -12, scale: 1.05 } : undefined}
                 whileTap={playable ? { scale: 0.94 } : { x: [0, -4, 4, -2, 0], transition: { duration: 0.25 } }}
                 transition={{ type: "spring", stiffness: 260, damping: 24 }}
                 onClick={() => (playable ? selectCard(c.id) : haptics.tap())}
                 aria-disabled={!playable}
-                className={`relative -mx-2 origin-bottom sm:-mx-1.5 ${playable ? "cursor-pointer" : "cursor-not-allowed"}`}
+                className={`relative -mx-1.5 origin-bottom sm:-mx-1 ${playable ? "cursor-pointer" : "cursor-not-allowed"}`}
                 style={{ zIndex: selected ? 50 : i }}
                 aria-label={`Karte ${cardLabel(c.value)}`}
               >
-                <CardFace value={c.value} dimmed={!playable && (controls.humanTurn || swapPhase)} selected={selected} />
+                <CardFace value={c.value} size="hand" dimmed={!playable && (controls.humanTurn || swapPhase)} selected={selected} />
               </motion.button>
             );
           })}

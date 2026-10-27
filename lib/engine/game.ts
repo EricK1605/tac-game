@@ -2,17 +2,21 @@ import type { GameSettings, GameState, LogEntry, Move, Player } from "@/types/ga
 import { initialMarbles, teamComplete } from "./board";
 import { PLAYER_COLORS, TEAM_NAMES, buildDeck, cardLabel, nextPlayer, partnerOf, shuffle } from "./constants";
 import { hasOpener, lastRelevantEntry, legalMoves } from "./moves";
-
-const BOT_NAMES = ["", "Max", "Lena", "Sophie"];
+import { DEFAULT_BOTS, personaById } from "@/lib/personas";
 
 export function newGame(settings: GameSettings): GameState {
-  const players: Player[] = [0, 1, 2, 3].map((id) => ({
-    id,
-    name: id === 0 ? settings.playerName || "Du" : BOT_NAMES[id],
-    isHuman: id === 0,
-    difficulty: settings.difficulty,
-    hand: [],
-  }));
+  const bots = settings.bots ?? DEFAULT_BOTS;
+  const players: Player[] = [0, 1, 2, 3].map((id) => {
+    const persona = id === 0 ? null : (personaById(bots[id - 1]) ?? personaById(DEFAULT_BOTS[id - 1]))!;
+    return {
+      id,
+      name: persona ? persona.name : settings.playerName || "Du",
+      isHuman: id === 0,
+      difficulty: settings.difficulty,
+      persona: persona?.id ?? null,
+      hand: [],
+    };
+  });
   const s: GameState = {
     phase: "swap",
     players,

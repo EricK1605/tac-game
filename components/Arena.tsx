@@ -7,17 +7,26 @@ import type { GameState } from "@/types/game";
 import { EMOTES, useGameStore, type FxEvent } from "@/store/gameStore";
 import { PLAYER_COLORS, teamOf } from "@/lib/engine/constants";
 import { haptics } from "@/lib/haptics";
+import { lookOf, personaById } from "@/lib/personas";
 import { CardBack } from "./CardView";
-import { Character, CHARACTER_TITLE, type Mood } from "./Character";
+import { Character, type Mood } from "./Character";
 import { Sidebar } from "./Sidebar";
 
-/** Portrait-Plätze am Brettrand – seitlich versetzt, damit Start- und Vorfelder frei bleiben. */
-const PORTRAIT_POS = [
-  { left: "50%", top: "96%" },
-  { left: "5%", top: "34%" },
-  { left: "50%", top: "4%" },
-  { left: "95%", top: "66%" },
-];
+/**
+ * Spielerkarten sitzen außerhalb des Bretts an der Ecke ihres Vorfelds:
+ * schmal (Handy, Tablet) über bzw. unter dem Brett, breit (xl) links bzw. rechts daneben.
+ */
+const PLATE_POS: Record<number, string> = {
+  2: "bottom-full left-0 mb-2 xl:bottom-auto xl:top-0 xl:left-auto xl:right-full xl:mb-0 xl:mr-5",
+  3: "bottom-full right-0 mb-2 xl:bottom-auto xl:top-0 xl:right-auto xl:left-full xl:mb-0 xl:ml-5",
+  1: "top-full left-0 mt-2 xl:top-auto xl:bottom-0 xl:left-auto xl:right-full xl:mt-0 xl:mr-5",
+  0: "top-full right-0 mt-2 xl:top-auto xl:bottom-0 xl:right-auto xl:left-full xl:mt-0 xl:ml-5",
+};
+
+/** Liegt die Spielerkarte oberhalb des Bretts? Dann zeigen Blasen nach unten (zum Brett hin). */
+const isTopSeat = (p: number) => p === 2 || p === 3;
+/** Rechte Spielerkarten werden gespiegelt, damit der Avatar außen sitzt. */
+const isRightSeat = (p: number) => p === 0 || p === 3;
 
 /** Aktuelle Stimmung einer Figur – läuft nach `until` automatisch zurück auf idle bzw. „denkt nach“. */
 function useMood(player: number, active: boolean): Mood {
@@ -34,69 +43,117 @@ function useMood(player: number, active: boolean): Mood {
   return active && thinking && player !== 0 ? "think" : "idle";
 }
 
-export function PlayerPortrait({ game, player, active }: { game: GameState; player: number; active: boolean }) {
+export function PlayerPlate({ game, player, active }: { game: GameState; player: number; active: boolean }) {
   const p = game.players[player];
   const col = PLAYER_COLORS[player];
   const mood = useMood(player, active);
-  const pos = PORTRAIT_POS[player];
+  const thinking = useGameStore((s) => s.thinking) && active && player !== 0;
   const skipped = active && game.skipPending;
-  const below = player === 2;
+  const right = isRightSeat(player);
+  const title = personaById(p.persona)?.title ?? "Ritter";
 
   return (
-    <div className="pointer-events-none absolute z-10 -translate-x-1/2 -translate-y-1/2" style={{ left: pos.left, top: pos.top }}>
-      <div className={`flex items-center ${player === 0 || player === 2 ? "flex-row gap-1" : "flex-col"}`}>
-        <div className="relative">
-          {/* Leuchtring für den aktiven Spieler */}
+    <div className={`pointer-events-none absolute z-20 max-w-[49%] xl:w-36 xl:max-w-none ${PLATE_POS[player]}`}>
+      <motion.div
+        animate={{ scale: active ? 1.04 : 1 }}
+        transition={{ type: "spring", stiffness: 400, damping: 25 }}
+        className={`relative flex items-center gap-2 rounded-2xl border-2 p-1.5 pr-3 shadow-[0_6px_18px_rgba(0,0,0,0.45)] backdrop-blur-md xl:flex-col xl:gap-1 xl:p-2.5 xl:text-center ${
+          right ? "flex-row-reverse pl-3 pr-1.5 text-right" : ""
+        }`}
+        style={{
+          borderColor: active ? "#fde047" : `${col.hex}88`,
+          background: `linear-gradient(${right ? "250deg" : "110deg"}, ${col.dark}ee, rgba(20,12,6,0.88) 70%)`,
+          boxShadow: active ? `0 0 0 3px ${col.hex}55, 0 0 22px ${col.hex}aa, 0 6px 18px rgba(0,0,0,0.45)` : undefined,
+        }}
+      >
+        <div className="relative shrink-0">
           {active && (
             <motion.div
-              className="absolute inset-[-6px] rounded-full"
-              style={{ background: `radial-gradient(circle, ${col.hex}aa 0%, transparent 70%)` }}
-              animate={{ scale: [1, 1.18, 1], opacity: [0.7, 1, 0.7] }}
+              className="absolute -inset-1.5 rounded-full"
+              style={{ background: `radial-gradient(circle, ${col.hex}cc 0%, transparent 70%)` }}
+              animate={{ scale: [1, 1.2, 1], opacity: [0.6, 1, 0.6] }}
               transition={{ repeat: Infinity, duration: 1.2 }}
             />
           )}
           <div
-            className="relative overflow-visible rounded-full border-[3px] bg-gradient-to-b from-[#5b7fd6] to-[#2b3f7a] shadow-[0_4px_0_rgba(0,0,0,0.45)]"
-            style={{ borderColor: active ? "#fde047" : col.dark }}
+            className="relative h-11 w-11 overflow-visible rounded-full border-[3px] bg-gradient-to-b from-[#5b7fd6] to-[#2b3f7a] xl:h-16 xl:w-16"
+            style={{ borderColor: active ? "#fde047" : col.hex }}
           >
-            <div className="h-11 w-11 sm:h-14 sm:w-14">
-              <Character player={player} mood={mood} size={56} className="!h-full !w-full [&>svg]:h-full [&>svg]:w-full" />
-            </div>
+            <Character look={lookOf(p.persona)} color={player} mood={mood} size={64} className="!h-full !w-full [&>svg]:h-full [&>svg]:w-full" />
           </div>
-          <EmoteBubble player={player} below={below} />
-          <ChatBubble player={player} below={below} />
+          <EmoteBubble player={player} />
         </div>
 
-        <div className="flex flex-col items-center">
-          <span
-            className="font-display rounded-md px-1.5 py-0.5 text-[11px] leading-none text-white text-stroke shadow-[0_2px_0_rgba(0,0,0,0.4)] sm:text-[13px]"
-            style={{ background: `linear-gradient(${col.light}, ${col.hex} 45%, ${col.dark})` }}
-          >
+        <div className={`flex min-w-0 flex-col ${right ? "items-end" : "items-start"} xl:items-center`}>
+          <span className="font-display text-stroke flex items-center gap-1 truncate text-[13px] leading-tight text-white sm:text-sm">
             {p.name}
-            {teamOf(player) === 0 && player !== 0 && <Crown className="ml-0.5 inline h-3 w-3 text-amber-200" aria-label="Partner" />}
+            {teamOf(player) === 0 && player !== 0 && <Crown className="h-3 w-3 shrink-0 text-amber-300" aria-label="Partner" />}
           </span>
-          <span className="hidden text-[9px] font-bold uppercase tracking-wider text-amber-100/60 sm:block">{CHARACTER_TITLE[player]}</span>
-          {player !== 0 && (
-            <span className="mt-0.5 flex -space-x-1.5">
-              {p.hand.map((c) => (
-                <CardBack key={c.id} mini className="h-3.5 w-2.5 !rounded-[2px] ring-1 ring-black/30" />
-              ))}
-            </span>
-          )}
-          {skipped && <span className="font-display mt-0.5 rounded bg-red-600 px-1 text-[10px] text-white text-stroke">setzt aus</span>}
+          <span className="truncate text-[9px] font-bold uppercase leading-tight tracking-wider" style={{ color: col.light }}>
+            {title}
+          </span>
+          <div className="mt-0.5 flex h-4 items-center gap-1">
+            <AnimatePresence mode="wait" initial={false}>
+              {skipped ? (
+                <Status key="skip" className="bg-red-600">setzt aus</Status>
+              ) : thinking ? (
+                <Status key="think" className="bg-black/40">
+                  <ThinkingDots />
+                </Status>
+              ) : (
+                <motion.span key="cards" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex -space-x-1.5">
+                  {p.hand.map((c) => (
+                    <CardBack key={c.id} mini className="h-3.5 w-2.5 !rounded-[2px] ring-1 ring-black/30" />
+                  ))}
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
-      </div>
+
+        <ChatBubble player={player} />
+      </motion.div>
     </div>
   );
 }
 
-/** Emote springt wie eine Sprechblase über der Figur auf. */
-function EmoteBubble({ player, below }: { player: number; below: boolean }) {
+function Status({ children, className }: { children: React.ReactNode; className: string }) {
+  return (
+    <motion.span
+      initial={{ opacity: 0, scale: 0.7 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.7 }}
+      className={`font-display text-stroke rounded px-1.5 text-[10px] leading-4 text-white ${className}`}
+    >
+      {children}
+    </motion.span>
+  );
+}
+
+function ThinkingDots() {
+  return (
+    <span className="flex items-center gap-0.5 py-1">
+      {[0, 1, 2].map((i) => (
+        <motion.span
+          key={i}
+          className="h-1.5 w-1.5 rounded-full bg-amber-200"
+          animate={{ y: [0, -3, 0], opacity: [0.5, 1, 0.5] }}
+          transition={{ repeat: Infinity, duration: 0.8, delay: i * 0.15 }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/** Emote springt am Avatar auf – Richtung Brett, damit es keine Namen verdeckt. */
+function EmoteBubble({ player }: { player: number }) {
   const last = useGameStore((s) => {
     for (let i = s.emotes.length - 1; i >= 0; i--) if (s.emotes[i].player === player) return s.emotes[i];
     return null;
   });
   const [shown, setShown] = useState<{ id: number; emoji: string } | null>(null);
+  const down = isTopSeat(player);
+  const right = isRightSeat(player);
 
   useEffect(() => {
     if (!last || Date.now() - last.time > 2500) return;
@@ -110,17 +167,20 @@ function EmoteBubble({ player, below }: { player: number; below: boolean }) {
       {shown && (
         <motion.div
           key={shown.id}
-          initial={{ scale: 0, y: below ? -10 : 10, rotate: -20 }}
-          animate={{ scale: [0, 1.35, 1], y: 0, rotate: [-20, 10, 0] }}
+          initial={{ scale: 0, y: down ? -16 : 16, rotate: -20 }}
+          animate={{ scale: [0, 1.3, 1], y: 0, rotate: [-20, 10, 0] }}
           exit={{ scale: 0, opacity: 0, transition: { duration: 0.18 } }}
           transition={{ duration: 0.45, ease: "easeOut" }}
-          className={`absolute left-1/2 z-30 -translate-x-1/2 ${below ? "top-full mt-1" : "bottom-full mb-1"}`}
+          // Schmal: über/unter dem Avatar Richtung Brett. Breit (Karten neben dem Brett): seitlich Richtung Brett.
+          className={`absolute left-1/2 z-30 -translate-x-1/2 ${down ? "top-full mt-1" : "bottom-full mb-1"} xl:bottom-auto xl:top-1/2 xl:my-0 xl:-translate-y-1/2 xl:translate-x-0 ${
+            right ? "xl:left-auto xl:right-[calc(100%+10px)]" : "xl:left-[calc(100%+10px)]"
+          }`}
         >
           <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl border-[3px] border-[#1b1630] bg-white text-3xl shadow-[0_4px_0_rgba(0,0,0,0.4)] sm:h-14 sm:w-14 sm:text-4xl">
             {shown.emoji}
             <span
-              className={`absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border-[#1b1630] bg-white ${
-                below ? "-top-[8px] border-l-[3px] border-t-[3px]" : "-bottom-[8px] border-b-[3px] border-r-[3px]"
+              className={`absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border-[#1b1630] bg-white xl:hidden ${
+                down ? "-top-[8px] border-l-[3px] border-t-[3px]" : "-bottom-[8px] border-b-[3px] border-r-[3px]"
               }`}
             />
           </div>
@@ -130,33 +190,42 @@ function EmoteBubble({ player, below }: { player: number; below: boolean }) {
   );
 }
 
-/** Text-Nachrichten der Bots als kleine Blase neben dem Portrait. */
-function ChatBubble({ player, below }: { player: number; below: boolean }) {
+/** Text-Nachrichten der Bots als Blase unter bzw. über der Spielerkarte – versetzt zum Emote. */
+function ChatBubble({ player }: { player: number }) {
   const last = useGameStore((s) => {
     for (let i = s.chat.length - 1; i >= 0; i--) if (s.chat[i].player === player) return s.chat[i];
     return null;
   });
-  const [bubble, setBubble] = useState<string | null>(null);
+  const [bubble, setBubble] = useState<{ id: number; text: string } | null>(null);
+  const down = isTopSeat(player);
+  const right = isRightSeat(player);
 
   useEffect(() => {
     if (!last || Date.now() - last.time > 4000) return;
-    setBubble(last.text);
+    setBubble({ id: last.id, text: last.text });
     const t = setTimeout(() => setBubble(null), 3200);
     return () => clearTimeout(t);
   }, [last?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const side = player === 1 ? "left-full top-0 ml-2" : player === 3 ? "right-full top-0 mr-2" : below ? "left-full top-1/2 ml-2 -translate-y-1/2" : "left-full top-0 ml-2";
   return (
     <AnimatePresence>
       {bubble && (
         <motion.div
-          initial={{ opacity: 0, scale: 0.6 }}
-          animate={{ opacity: 1, scale: 1 }}
+          key={bubble.id}
+          initial={{ opacity: 0, scale: 0.6, y: down ? -8 : 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.8 }}
-          transition={{ type: "spring", stiffness: 400, damping: 20 }}
-          className={`absolute z-20 w-max max-w-[150px] rounded-xl border-2 border-[#1b1630] bg-white px-2.5 py-1 text-[11px] font-bold text-stone-800 shadow-[0_3px_0_rgba(0,0,0,0.35)] sm:text-xs ${side}`}
+          transition={{ type: "spring", stiffness: 400, damping: 22 }}
+          className={`absolute z-30 w-max max-w-[170px] rounded-2xl border-2 border-[#1b1630] bg-white px-3 py-1.5 text-xs font-bold leading-snug text-stone-800 shadow-[0_4px_0_rgba(0,0,0,0.35)] ${
+            down ? "top-full mt-2" : "bottom-full mb-2"
+          } ${right ? "right-14 origin-top-right xl:right-auto xl:left-1/2 xl:-translate-x-1/2" : "left-14 origin-top-left xl:left-1/2 xl:-translate-x-1/2"}`}
         >
-          {bubble}
+          {bubble.text}
+          <span
+            className={`absolute h-2.5 w-2.5 rotate-45 border-[#1b1630] bg-white ${right ? "right-4" : "left-4"} xl:left-1/2 xl:right-auto xl:-translate-x-1/2 ${
+              down ? "-top-[7px] border-l-2 border-t-2" : "-bottom-[7px] border-b-2 border-r-2"
+            }`}
+          />
         </motion.div>
       )}
     </AnimatePresence>
@@ -284,7 +353,7 @@ export function EmoteButton() {
   };
 
   return (
-    <div className="fixed bottom-3 left-3 z-40">
+    <div className="fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] left-3 z-40">
       <AnimatePresence>
         {open && (
           <motion.div
@@ -346,7 +415,7 @@ export function SidebarDrawer({ game }: { game: GameState }) {
           haptics.tap();
           setOpen(true);
         }}
-        className="chunky-btn chunky-gold fixed bottom-3 right-3 z-40 flex h-14 w-14 items-center justify-center rounded-2xl"
+        className="chunky-btn chunky-gold fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] right-3 z-40 flex h-14 w-14 items-center justify-center rounded-2xl"
         aria-label="Spielverlauf und Chat"
       >
         <MessageCircle className="h-7 w-7" strokeWidth={2.6} />
@@ -382,7 +451,7 @@ export function SidebarDrawer({ game }: { game: GameState }) {
               onDragEnd={(_, info) => {
                 if (info.offset.y > 120 || info.velocity.y > 600) setOpen(false);
               }}
-              className="fixed inset-x-0 bottom-0 z-50 flex h-[72dvh] flex-col rounded-t-3xl border-t-[3px] border-[#1b1630] bg-[#1c120b] p-2 pt-1 shadow-2xl"
+              className="fixed inset-x-0 bottom-0 z-50 flex h-[72dvh] flex-col rounded-t-3xl border-t-[3px] border-[#1b1630] bg-[#1c120b] p-2 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-2xl"
             >
               <div className="mx-auto my-2 h-1.5 w-12 shrink-0 rounded-full bg-amber-100/30" />
               <div className="min-h-0 flex-1">

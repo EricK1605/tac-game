@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useAnimationControls } from "framer-motion";
 import { BookOpen, Home, RotateCcw, Trophy, Volume2, VolumeX } from "lucide-react";
 import type { GameState } from "@/types/game";
@@ -8,7 +8,8 @@ import { useGameStore } from "@/store/gameStore";
 import { PLAYER_COLORS, TEAM_NAMES, isHome, teamOf } from "@/lib/engine/constants";
 import { decider } from "@/lib/engine/moves";
 import { haptics } from "@/lib/haptics";
-import { EmoteButton, FxOverlay, PlayerPortrait, SidebarDrawer } from "./Arena";
+import { lookOf } from "@/lib/personas";
+import { EmoteButton, FxOverlay, PlayerPlate, SidebarDrawer } from "./Arena";
 import { Board } from "./Board";
 import { CardFace } from "./CardView";
 import { Character } from "./Character";
@@ -46,22 +47,23 @@ export function GameScreen() {
   }, [controls.humanTurn, game.current]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh select-none flex-col">
       {/* Kopfzeile */}
       <header className="flex items-center justify-between gap-2 px-3 py-2 sm:px-5">
         <div className="flex items-center gap-3">
-          <span className="font-display text-stroke-lg text-3xl text-amber-200">
+          <span className="font-display text-stroke-lg text-2xl text-amber-200 sm:text-3xl">
             T<span className="text-red-500">A</span>C
           </span>
-          <span className="font-display hidden rounded-lg border-2 border-[#1b1630] bg-black/40 px-2.5 py-1 text-xs text-amber-100/90 sm:inline">
+          <span className="font-display hidden rounded-lg border-2 border-[#1b1630] bg-black/40 px-2.5 py-1 text-xs text-amber-100/90 lg:inline">
             Runde {game.dealNumber} · {DIFF_LABEL[settings.difficulty]}
             {game.master ? " · Meisterversion" : ""}
           </span>
         </div>
+        <TeamScore game={game} />
         <div className="flex items-center gap-1.5">
           <IconButton onClick={() => setShowRules(true)} label="Regeln">
             <BookOpen className="h-4 w-4" />
-            <span className="hidden sm:inline">Wie spiele ich TAC?</span>
+            <span className="hidden xl:inline">Wie spiele ich TAC?</span>
           </IconButton>
           <IconButton onClick={toggleSound} label={sound ? "Ton aus" : "Ton an"}>
             {sound ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
@@ -74,28 +76,34 @@ export function GameScreen() {
 
       <main className="mx-auto grid w-full max-w-[1500px] flex-1 grid-cols-1 gap-4 px-2 pb-20 sm:px-4 lg:grid-cols-[1fr_340px] lg:pb-3">
         <div className="flex min-w-0 flex-col items-center gap-2">
-          <TeamScore game={game} />
-          <motion.div animate={shake} className="relative w-full max-w-[min(92vw,calc(100dvh-370px))] min-w-[300px]">
-            <Board
-              marbles={controls.displayBoard}
-              anim={anim}
-              selectable={controls.selectable}
-              selected={controls.selected}
-              targets={controls.targets}
-              onMarbleClick={controls.onMarbleClick}
-              activeColor={active}
-              preview={controls.preview}
-              overlay={
-                <>
-                  <CenterPile game={game} />
-                  {[0, 1, 2, 3].map((p) => (
-                    <PlayerPortrait key={p} game={game} player={p} active={active === p} />
-                  ))}
-                  <FxOverlay game={game} />
-                </>
-              }
-            />
-          </motion.div>
+          {/*
+            Brettgröße = Bildschirmhöhe minus Kopfzeile, Handbereich und – bis xl – die Spielerkarten über und unter dem Brett.
+            Ab xl sitzen die Spielerkarten links und rechts, dafür wird Breite freigehalten.
+          */}
+          <div className="relative my-[70px] w-full min-w-[300px] max-w-[min(98vw,calc(100dvh-380px))] md:max-w-[min(96vw,calc(100dvh-370px))] xl:my-1 xl:max-w-[min(calc(100%-340px),calc(100dvh-258px))]">
+            <motion.div animate={shake}>
+              <Board
+                marbles={controls.displayBoard}
+                anim={anim}
+                selectable={controls.selectable}
+                selected={controls.selected}
+                targets={controls.targets}
+                onMarbleClick={controls.onMarbleClick}
+                activeColor={active}
+                preview={controls.preview}
+                overlay={
+                  <>
+                    <CenterPile game={game} />
+                    <FxOverlay game={game} />
+                    <TurnBanner game={game} humanTurn={controls.humanTurn} />
+                  </>
+                }
+              />
+            </motion.div>
+            {[0, 1, 2, 3].map((p) => (
+              <PlayerPlate key={p} game={game} player={p} active={active === p} />
+            ))}
+          </div>
           <HandArea game={game} controls={controls} />
         </div>
 
@@ -120,31 +128,84 @@ function IconButton({ children, onClick, label }: { children: React.ReactNode; o
       }}
       title={label}
       aria-label={label}
-      className="chunky-btn chunky-dark flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm"
+      className="chunky-btn chunky-dark flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-sm sm:px-3"
     >
       {children}
     </button>
   );
 }
 
+/** Fortschritt beider Teams – auf dem Handy als kompakte Zahl, ab sm mit acht Lichtpunkten. */
 function TeamScore({ game }: { game: GameState }) {
   const count = (team: number) => game.marbles.filter((m) => teamOf(m.color) === team && isHome(m.pos)).length;
   return (
-    <div className="flex items-center gap-3 text-xs font-semibold sm:text-sm">
+    <div className="flex items-center gap-1.5 text-xs font-semibold sm:gap-3 sm:text-sm">
       {[0, 1].map((t) => (
-        <div key={t} className={`flex items-center gap-2 rounded-full px-3 py-1 ${t === 0 ? "bg-emerald-950/40" : "bg-blue-950/40"} ring-1 ring-amber-200/10`}>
+        <div
+          key={t}
+          className={`flex items-center gap-1.5 rounded-full px-2 py-1 sm:gap-2 sm:px-3 ${t === 0 ? "bg-emerald-950/50" : "bg-blue-950/50"} ring-1 ring-amber-200/10`}
+          title={t === 0 ? "Dein Team" : "Gegner"}
+        >
           <span className="flex -space-x-1">
             <span className="h-3 w-3 rounded-full ring-1 ring-black/40" style={{ background: PLAYER_COLORS[t].hex }} />
             <span className="h-3 w-3 rounded-full ring-1 ring-black/40" style={{ background: PLAYER_COLORS[t + 2].hex }} />
           </span>
-          <span className="text-amber-100/80">{t === 0 ? "Dein Team" : "Gegner"}</span>
-          <span className="flex gap-0.5">
+          <span className="hidden text-amber-100/80 md:inline">{t === 0 ? "Dein Team" : "Gegner"}</span>
+          <span className="font-display text-amber-100 sm:hidden">{count(t)}/8</span>
+          <span className="hidden gap-0.5 sm:flex">
             {Array.from({ length: 8 }, (_, i) => (
-              <span key={i} className={`h-2 w-2 rounded-full ${i < count(t) ? "bg-amber-300 shadow-[0_0_6px_#fcd34d]" : "bg-white/15"}`} />
+              <motion.span
+                key={i}
+                animate={i < count(t) ? { scale: [1.8, 1] } : { scale: 1 }}
+                className={`h-2 w-2 rounded-full ${i < count(t) ? "bg-amber-300 shadow-[0_0_6px_#fcd34d]" : "bg-white/15"}`}
+              />
             ))}
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Banner über dem Brett: „Runde n“ nach dem Geben und „Dein Zug!“, sobald du dran bist. */
+function TurnBanner({ game, humanTurn }: { game: GameState; humanTurn: boolean }) {
+  const [banner, setBanner] = useState<{ key: string; text: string; sub?: string } | null>(null);
+
+  useEffect(() => {
+    if (game.dealNumber < 1) return;
+    setBanner({ key: `deal-${game.dealNumber}`, text: `Runde ${game.dealNumber}`, sub: "Gib deinem Partner eine Karte" });
+  }, [game.dealNumber]);
+
+  useEffect(() => {
+    if (!humanTurn || game.phase !== "play") return;
+    setBanner({ key: `turn-${game.moveCounter}`, text: "Dein Zug!" });
+  }, [humanTurn, game.phase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!banner) return;
+    const t = setTimeout(() => setBanner(null), banner.sub ? 1600 : 1100);
+    return () => clearTimeout(t);
+  }, [banner]);
+
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-[17%] z-30 flex justify-center overflow-hidden">
+      <AnimatePresence>
+        {banner && (
+          <motion.div
+            key={banner.key}
+            initial={{ x: "-120%", skewX: -12 }}
+            animate={{ x: 0, skewX: -12 }}
+            exit={{ x: "120%", skewX: -12, transition: { duration: 0.25, ease: "easeIn" } }}
+            transition={{ type: "spring", stiffness: 260, damping: 24 }}
+            className="border-y-[3px] border-[#1b1630] bg-gradient-to-r from-amber-500/0 via-amber-400 to-amber-500/0 px-16 py-1.5 text-center"
+          >
+            <div style={{ transform: "skewX(12deg)" }}>
+              <div className="font-display text-stroke-lg text-3xl leading-none text-white sm:text-4xl">{banner.text}</div>
+              {banner.sub && <div className="font-display text-stroke mt-0.5 text-xs text-amber-50 sm:text-sm">{banner.sub}</div>}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -171,7 +232,7 @@ function CenterPile({ game }: { game: GameState }) {
               className="absolute"
               style={{ zIndex: i }}
             >
-              <div className="scale-[0.6] sm:scale-75 lg:scale-90">
+              <div className="scale-[0.5] sm:scale-[0.6] lg:scale-[0.72]">
                 <CardFace value={e.card.value} size="md" />
               </div>
               {i === pile.length - 1 && (
@@ -202,11 +263,11 @@ function GameOverModal({ game }: { game: GameState }) {
         className="w-full max-w-md rounded-3xl border border-amber-200/30 bg-gradient-to-b from-[#3b2414] to-[#1c120b] p-8 text-center shadow-2xl"
       >
         <div className="mb-4 flex items-end justify-center gap-2">
-          <MoodLoop player={game.winner ?? 0} won />
+          <MoodLoop game={game} player={game.winner ?? 0} />
           <motion.div animate={{ rotate: [0, -8, 8, 0] }} transition={{ repeat: Infinity, duration: 2.4 }}>
             <Trophy className={`h-16 w-16 ${won ? "text-amber-300 drop-shadow-[0_0_20px_#fcd34d]" : "text-stone-400"}`} />
           </motion.div>
-          <MoodLoop player={(game.winner ?? 0) + 2} won />
+          <MoodLoop game={game} player={(game.winner ?? 0) + 2} />
         </div>
         <h2 className="font-display text-stroke-lg text-5xl text-amber-200">{won ? "Gewonnen!" : "Verloren"}</h2>
         <p className="mt-2 text-amber-100/70">
@@ -226,10 +287,10 @@ function GameOverModal({ game }: { game: GameState }) {
 }
 
 /** Figur, die im Abschlussdialog immer wieder jubelt. */
-function MoodLoop({ player, won }: { player: number; won: boolean }) {
+function MoodLoop({ game, player }: { game: GameState; player: number }) {
   return (
     <motion.div animate={{ y: [0, -14, 0] }} transition={{ repeat: Infinity, duration: 0.9, ease: "easeOut", delay: player * 0.15 }}>
-      <Character player={player} mood={won ? "happy" : "sad"} size={72} />
+      <Character look={lookOf(game.players[player].persona)} color={player} mood="happy" size={72} />
     </motion.div>
   );
 }

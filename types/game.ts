@@ -31,6 +31,8 @@ export interface Player {
   name: string;
   isHuman: boolean;
   difficulty: Difficulty;
+  /** Bot-Charakter (siehe lib/personas.ts), beim Menschen null */
+  persona: string | null;
   hand: Card[];
 }
 
@@ -142,4 +144,6 @@ export interface GameSettings {
   difficulty: Difficulty;
   master: boolean;
   speed: number; // 0.5 … 2 (Bot-Geschwindigkeit)
+  /** Charaktere der Bots auf den Plätzen 1–3 (Platz 2 = Partner) */
+  bots?: string[];
 }

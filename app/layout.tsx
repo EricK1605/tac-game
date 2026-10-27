@@ -19,12 +19,14 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  viewportFit: "cover",
   themeColor: "#1a0e06",
 };
 
 export const metadata: Metadata = {
   title: "TAC – Das Strategiespiel",
   description: "TAC online gegen KI-Gegner: Karten- und Brettspiel für zwei Teams",
+  appleWebApp: { capable: true, title: "TAC", statusBarStyle: "black-translucent" },
 };
 
 export default function RootLayout({

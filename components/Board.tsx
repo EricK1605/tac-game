@@ -67,7 +67,7 @@ export function Board({ marbles, anim, selectable, selected, targets, onMarbleCl
 
   return (
     <div className="relative aspect-square w-full select-none">
-      <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="h-full w-full drop-shadow-[0_25px_40px_rgba(0,0,0,0.6)]">
+      <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="h-full w-full drop-shadow-[0_10px_22px_rgba(0,0,0,0.5)]">
         <BoardDefs />
         <StaticBoard activeColor={activeColor} />
 
@@ -147,10 +147,10 @@ const MarbleView = memo(function MarbleView({
           transition={{ repeat: selected ? 0 : Infinity, duration: 1.1 }}
         />
       )}
-      <ellipse cx={3} cy={5} rx={MARBLE_R} ry={MARBLE_R * 0.8} fill="rgba(0,0,0,0.45)" filter="url(#blur)" />
+      <ellipse cx={3.5} cy={6} rx={MARBLE_R} ry={MARBLE_R * 0.8} fill="rgba(0,0,0,0.45)" filter="url(#blur)" />
       <circle r={MARBLE_R} fill={`url(#marble-${m.color})`} stroke="rgba(0,0,0,0.35)" strokeWidth={0.8} />
       <circle r={MARBLE_R} fill="url(#marble-gloss)" />
-      <ellipse cx={-4.5} cy={-5.5} rx={4.2} ry={2.8} fill="rgba(255,255,255,0.85)" transform="rotate(-30 -4.5 -5.5)" />
+      <ellipse cx={-5.3} cy={-6.5} rx={5} ry={3.3} fill="rgba(255,255,255,0.85)" transform="rotate(-30 -5.3 -6.5)" />
     </motion.g>
   );
 });
@@ -165,7 +165,9 @@ function BoardDefs() {
       </linearGradient>
       <filter id="grain" x="0" y="0" width="100%" height="100%">
         <feTurbulence type="fractalNoise" baseFrequency="0.003 0.085" numOctaves={4} seed={11} result="n" />
-        <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.24  0 0 0 0 0.12  0 0 0 0 0.04  0 0 0 1.3 -0.42" />
+        <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.24  0 0 0 0 0.12  0 0 0 0 0.04  0 0 0 1.3 -0.42" result="g" />
+        {/* Maserung nur innerhalb der abgerundeten Platte – sonst entstehen dunkle Ecken und ein Streifen unter dem Brett */}
+        <feComposite in="g" in2="SourceGraphic" operator="in" />
       </filter>
       <filter id="blur" x="-50%" y="-50%" width="200%" height="200%">
         <feGaussianBlur stdDeviation="2.2" />
@@ -216,9 +218,9 @@ const StaticBoard = memo(function StaticBoard({ activeColor }: { activeColor: nu
       <rect x={22} y={22} width={SIZE - 44} height={SIZE - 44} rx={58} fill="none" stroke="rgba(255,230,190,0.25)" strokeWidth={2} />
 
       {/* Laufrille */}
-      <circle cx={CENTER} cy={CENTER} r={RING_R} fill="none" stroke="rgba(40,20,5,0.28)" strokeWidth={50} />
-      <circle cx={CENTER} cy={CENTER} r={RING_R + 26} fill="none" stroke="rgba(255,230,190,0.18)" strokeWidth={2} />
-      <circle cx={CENTER} cy={CENTER} r={RING_R - 26} fill="none" stroke="rgba(255,230,190,0.12)" strokeWidth={2} />
+      <circle cx={CENTER} cy={CENTER} r={RING_R} fill="none" stroke="rgba(40,20,5,0.28)" strokeWidth={58} />
+      <circle cx={CENTER} cy={CENTER} r={RING_R + 30} fill="none" stroke="rgba(255,230,190,0.18)" strokeWidth={2} />
+      <circle cx={CENTER} cy={CENTER} r={RING_R - 30} fill="none" stroke="rgba(255,230,190,0.12)" strokeWidth={2} />
 
       {/* Kartenablage */}
       <circle cx={CENTER} cy={CENTER} r={135} fill="url(#center-well)" stroke="#3a1f0c" strokeWidth={4} />
@@ -246,7 +248,7 @@ const StaticBoard = memo(function StaticBoard({ activeColor }: { activeColor: nu
               d={[0, 1, 2, 3].map((i, k) => `${k ? "L" : "M"}${homePoint(c, i).x},${homePoint(c, i).y}`).join(" ")}
               stroke={col.hex}
               strokeOpacity={0.35}
-              strokeWidth={34}
+              strokeWidth={38}
               strokeLinecap="round"
               fill="none"
             />
@@ -257,7 +259,7 @@ const StaticBoard = memo(function StaticBoard({ activeColor }: { activeColor: nu
               </g>
             ))}
             {/* Vorfeld */}
-            <circle cx={bc.x} cy={bc.y} r={62} fill={col.hex} opacity={active ? 0.38 : 0.2} stroke={col.hex} strokeOpacity={0.7} strokeWidth={active ? 4 : 2} />
+            <circle cx={bc.x} cy={bc.y} r={74} fill={col.hex} opacity={active ? 0.38 : 0.2} stroke={col.hex} strokeOpacity={0.7} strokeWidth={active ? 4 : 2} />
             {[0, 1, 2, 3].map((slot) => (
               <Hole key={slot} p={basePoint(c, slot)} />
             ))}

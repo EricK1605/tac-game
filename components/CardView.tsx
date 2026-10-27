@@ -8,7 +8,7 @@ const MASTER_ICON = { engel: Feather, teufel: Flame, krieger: Swords, narr: Dram
 
 interface Props {
   value: CardValue;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "hand" | "md" | "lg";
   dimmed?: boolean;
   selected?: boolean;
   className?: string;
@@ -16,6 +16,7 @@ interface Props {
 
 const SIZES = {
   sm: "w-11 h-16 text-lg rounded-md",
+  hand: "w-14 h-20 text-2xl rounded-lg sm:w-16 sm:h-[5.6rem] sm:text-[1.75rem] sm:rounded-xl",
   md: "w-[4.6rem] h-[6.6rem] sm:w-20 sm:h-28 text-3xl rounded-xl",
   lg: "w-24 h-36 text-5xl rounded-2xl",
 };

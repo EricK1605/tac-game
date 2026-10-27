@@ -2,6 +2,7 @@ import type { Card, CardValue, Difficulty, GameState, Marble, Move } from "@/typ
 import { allHome, controllableColors, ringDist } from "@/lib/engine/board";
 import { BASE, HOME_OFFSET, isHome, isRing, partnerOf, startOf, teamOf } from "@/lib/engine/constants";
 import { activeHandOwner, cardMoves, decider, legalMoves } from "@/lib/engine/moves";
+import { NEUTRAL_STYLE, personaById, type CommentKind, type Playstyle } from "@/lib/personas";
 
 /**
  * KI-Gegner für TAC.
@@ -102,30 +103,53 @@ function captureSummary(move: Move, s: GameState, team: number) {
   return { enemy, friendly };
 }
 
-function mediumScore(move: Move, s: GameState, team: number): number {
-  const { enemy, friendly } = captureSummary(move, s, team);
-  let score = enemy * 40 - friendly * 50;
-  if (move.kind === "enter") score += teamOf(s.marbles[move.marbleId!].color) === team ? 30 : -30;
-  for (const m of move.board) {
-    const before = s.marbles[m.id];
-    if (isHome(m.pos) && !isHome(before.pos)) score += teamOf(m.color) === team ? 45 : -45;
+/** Wie viele gegnerische Kugeln stehen in Schlagdistanz vor eigenen Kugeln? */
+function huntTargets(marbles: Marble[], team: number): number {
+  let n = 0;
+  for (const m of marbles) {
+    if (teamOf(m.color) !== team || !isRing(m.pos)) continue;
+    for (const o of marbles) if (teamOf(o.color) !== team && isRing(o.pos) && FORWARD_THREATS.has(ringDist(m.pos, o.pos))) n++;
   }
-  score += (evaluate(move.board, team, false) - evaluate(s.marbles, team, false)) * 0.3;
-  if (move.kind === "discard") score -= keepValue(s.players[move.handOwner].hand.find((c) => c.id === move.cardId)!.value, s, move.handOwner);
-  return score + Math.random() * 2;
+  return n;
 }
 
-function hardScore(move: Move, s: GameState, team: number, handCards: Card[]): number {
+/** Veränderung der Gefährdungslage durch den Zug (negativ = eigene Kugeln stehen gefährlicher). */
+function dangerDelta(move: Move, s: GameState, team: number): number {
+  const before = evaluate(s.marbles, team, true) - evaluate(s.marbles, team, false);
+  const after = evaluate(move.board, team, true) - evaluate(move.board, team, false);
+  return after - before;
+}
+
+function mediumScore(move: Move, s: GameState, team: number, st: Playstyle): number {
+  const { enemy, friendly } = captureSummary(move, s, team);
+  let score = enemy * 40 * st.capture - friendly * 50;
+  if (move.kind === "enter") score += (teamOf(s.marbles[move.marbleId!].color) === team ? 30 : -30) * st.open;
+  for (const m of move.board) {
+    const before = s.marbles[m.id];
+    if (isHome(m.pos) && !isHome(before.pos)) score += (teamOf(m.color) === team ? 45 : -45) * st.rush;
+  }
+  score += (evaluate(move.board, team, false) - evaluate(s.marbles, team, false)) * 0.3 * st.rush;
+  if (move.kind === "discard") score -= keepValue(s.players[move.handOwner].hand.find((c) => c.id === move.cardId)!.value, s, move.handOwner);
+  // Charakterzüge (beim neutralen Stil alle 0)
+  if (st.safety > 1) score += dangerDelta(move, s, team) * (st.safety - 1);
+  if (st.capture > 1) score += (huntTargets(move.board, team) - huntTargets(s.marbles, team)) * 3 * (st.capture - 1);
+  if (st.tacHoard !== 1 && s.subTurn?.type !== "devil" && s.players[move.handOwner].hand.find((c) => c.id === move.cardId)?.value === "tac")
+    score -= 4 * (st.tacHoard - 1);
+  if (move.kind === "skip") score += 6 * (st.tricks - 1);
+  if (move.kind === "swap") score += 5 * (st.tricks - 1);
+  if (move.kind === "devil") score += 14 * (st.tricks - 1);
+  return score + Math.random() * st.chaos;
+}
+
+function hardScore(move: Move, s: GameState, team: number, handCards: Card[], st: Playstyle): number {
   // Basis: taktische Prioritäten wie Mittel, plus Veränderung der Gefährdungslage.
-  const dangerBefore = evaluate(s.marbles, team, true) - evaluate(s.marbles, team, false);
-  const dangerAfter = evaluate(move.board, team, true) - evaluate(move.board, team, false);
-  let score = mediumScore(move, s, team) + (dangerAfter - dangerBefore);
+  let score = mediumScore(move, s, team, st) + dangerDelta(move, s, team) * Math.min(st.safety, 1);
   const card = handCards.find((c) => c.id === move.cardId);
   if (!card) return score;
   const devilMode = s.subTurn?.type === "devil";
   if (!devilMode) {
     // TAC nicht verschwenden, wenn der Zug wenig bringt (Simulation: pauschales Kartensparen schadet).
-    if (card.value === "tac") score -= 4;
+    if (card.value === "tac") score -= 4; // Charakter-Anteil steckt schon in mediumScore
   } else {
     // Beim Teufel verbrennen wir am liebsten die besten Karten des Gegners.
     score += keepValue(card.value, s, move.handOwner) * 0.8;
@@ -139,19 +163,27 @@ function hardScore(move: Move, s: GameState, team: number, handCards: Card[]): n
   return score;
 }
 
-export function chooseMove(s: GameState, difficulty: Difficulty): Move | null {
+/** Zufallsanteil auf „Leicht“ – der Charakter schimmert durch, gespielt wird aber schwach. */
+const EASY_CHAOS = 60;
+
+export function chooseMove(s: GameState, difficulty: Difficulty, st: Playstyle = NEUTRAL_STYLE): Move | null {
   const moves = legalMoves(s);
   if (!moves.length) return null;
   if (moves.length === 1) return moves[0];
   const me = decider(s);
   const team = teamOf(me);
-  if (difficulty === "easy") {
-    // Leicht: zufälliger gültiger Zug (Abwürfe zufällig).
-    return moves[Math.floor(Math.random() * moves.length)];
-  }
   const hand = s.players[activeHandOwner(s)].hand;
+  if (difficulty === "easy") {
+    // Leicht: neutral rein zufällig, mit Charakter stark verrauschte Mittel-Bewertung.
+    if (st === NEUTRAL_STYLE) return moves[Math.floor(Math.random() * moves.length)];
+    const noisy = { ...st, chaos: st.chaos + EASY_CHAOS };
+    return moves.reduce((best, mv) => {
+      const sc = mediumScore(mv, s, team, noisy);
+      return sc > best.sc ? { mv, sc } : best;
+    }, { mv: moves[0], sc: -Infinity }).mv;
+  }
   const scored = moves.map((mv) => {
-    let sc = difficulty === "medium" ? mediumScore(mv, s, team) : hardScore(mv, s, team, hand);
+    let sc = difficulty === "medium" ? mediumScore(mv, s, team, st) : hardScore(mv, s, team, hand, st);
     if (mv.kind === "discard" && difficulty === "hard") {
       const card = hand.find((c) => c.id === mv.cardId)!;
       sc = (s.subTurn?.type === "devil" ? 1 : -1) * keepValue(card.value, s, mv.handOwner);
@@ -159,13 +191,15 @@ export function chooseMove(s: GameState, difficulty: Difficulty): Move | null {
     return { mv, sc };
   });
   scored.sort((a, b) => b.sc - a.sc);
-  if (difficulty === "medium" || s.subTurn?.type === "devil" || scored[0].mv.kind === "discard") return scored[0].mv;
+  // Planen: auf „Schwer“ immer, auf „Mittel“ nur für planende Charaktere
+  const planWeight = PLAN_WEIGHT * st.plan * (difficulty === "medium" ? (st.plan > 1 ? 0.6 : 0) : 1);
+  if (planWeight === 0 || s.subTurn?.type === "devil" || scored[0].mv.kind === "discard") return scored[0].mv;
 
-  // Schwer: Kombinationen aus der eigenen Hand planen (z. B. eröffnen, dann mit der 4 rückwärts).
+  // Kombinationen aus der eigenen Hand planen (z. B. eröffnen, dann mit der 4 rückwärts).
   let best = scored[0].mv;
   let bestScore = -Infinity;
   for (const { mv, sc } of scored.slice(0, PLAN_CANDIDATES)) {
-    const sc2 = sc + PLAN_WEIGHT * bestFollowUp(s, mv, me, team, hand);
+    const sc2 = sc + planWeight * bestFollowUp(s, mv, me, team, hand);
     if (sc2 > bestScore) {
       bestScore = sc2;
       best = mv;
@@ -196,9 +230,9 @@ function bestFollowUp(s: GameState, mv: Move, me: number, team: number, hand: Ca
 }
 
 /** Welche Karte gibt der Bot seinem Partner? */
-export function chooseSwapCard(s: GameState, player: number, difficulty: Difficulty): string {
+export function chooseSwapCard(s: GameState, player: number, difficulty: Difficulty, st: Playstyle = NEUTRAL_STYLE): string {
   const hand = s.players[player].hand;
-  if (difficulty === "easy") return hand[Math.floor(Math.random() * hand.length)].id;
+  if (difficulty === "easy" || st.chaos > 10) return hand[Math.floor(Math.random() * hand.length)].id;
   const partner = partnerOf(player);
   const pCols = controllableColors(s.marbles, partner);
   const partnerStuck =
@@ -213,6 +247,12 @@ export function chooseSwapCard(s: GameState, player: number, difficulty: Difficu
     return openers[0].id;
   if (partnerStuck && openers.length > 1) return openers[0].id;
 
+  // Großzügige Teamplayer verschenken ihre beste Karte (nur TAC bleibt auf der Hand).
+  if (st.team > 1.5) {
+    const gifts = hand.filter((c) => c.value !== "tac");
+    if (gifts.length) return gifts.reduce((a, b) => (keepValue(b.value, s, partner) > keepValue(a.value, s, partner) ? b : a)).id;
+  }
+
   let worst = hand[0];
   let worstVal = Infinity;
   for (const c of hand) {
@@ -226,8 +266,10 @@ export function chooseSwapCard(s: GameState, player: number, difficulty: Difficu
   return worst.id;
 }
 
-/** Kurzer Kommentar des Bots zur Spielsituation. */
-export function botComment(kind: "capturedEnemy" | "gotCaptured" | "partnerGood" | "home" | "tac" | "win" | "lose"): string {
+/** Kurzer Kommentar des Bots zur Spielsituation – bevorzugt im Tonfall seines Charakters. */
+export function botComment(kind: Exclude<CommentKind, "greet">, persona?: string | null): string {
+  const own = personaById(persona)?.lines[kind];
+  if (own?.length && Math.random() < 0.8) return own[Math.floor(Math.random() * own.length)];
   const lines: Record<typeof kind, string[]> = {
     capturedEnemy: ["Ab nach Hause mit dir! 😏", "Tschüss!", "Das musste sein.", "Erwischt!"],
     gotCaptured: ["Autsch! 😩", "Ouch!", "Das gibt Rache…", "Na warte!"],

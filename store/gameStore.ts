@@ -9,6 +9,7 @@ import { BASE, isHome, partnerOf, teamOf } from "@/lib/engine/constants";
 import { botComment, chooseMove, chooseSwapCard } from "@/lib/ai/botEngine";
 import { setSoundEnabled, sfx } from "@/lib/audio";
 import { haptics } from "@/lib/haptics";
+import { DEFAULT_BOTS, personaById, styleOf } from "@/lib/personas";
 import type { Mood } from "@/components/Character";
 
 export const STEP_MS = 95;
@@ -144,26 +145,28 @@ export const useGameStore = create<Store>()((set, get) => {
     }, delayMs);
   };
 
+  const personaOf = (p: number) => get().game?.players[p].persona ?? null;
+
   /** Bots kommentieren das Geschehen. */
   const react = (before: GameState, move: Move, after: GameState) => {
     const mover = before.subTurn ? before.subTurn.actor : before.current;
     celebrate(before, move, after, Math.max(0, animDuration(move) - (move.captured.length ? 450 : 0)));
     const capturedOwners = [...new Set(move.captured.map((id) => before.marbles[id].color))];
     for (const owner of capturedOwners) {
-      if (owner !== 0 && owner !== mover && Math.random() < 0.6) addChat(owner, botComment("gotCaptured"));
+      if (owner !== 0 && owner !== mover && Math.random() < 0.6) addChat(owner, botComment("gotCaptured", personaOf(owner)));
     }
     const enemyHit = capturedOwners.some((c) => teamOf(c) !== teamOf(mover));
     if (enemyHit) {
-      if (mover !== 0 && Math.random() < 0.5) addChat(mover, botComment("capturedEnemy"));
-      if (mover === 0 && Math.random() < 0.75) addChat(partnerOf(0), botComment("partnerGood"));
+      if (mover !== 0 && Math.random() < 0.5) addChat(mover, botComment("capturedEnemy", personaOf(mover)));
+      if (mover === 0 && Math.random() < 0.75) addChat(partnerOf(0), botComment("partnerGood", personaOf(partnerOf(0))));
     }
     const card = before.players[move.handOwner].hand.find((c) => c.id === move.cardId);
-    if (card?.value === "tac" && mover !== 0 && move.kind !== "discard" && Math.random() < 0.7) addChat(mover, botComment("tac"));
+    if (card?.value === "tac" && mover !== 0 && move.kind !== "discard" && Math.random() < 0.7) addChat(mover, botComment("tac", personaOf(mover)));
     const newHome = move.board.some((m) => isHome(m.pos) && !isHome(before.marbles[m.id].pos));
-    if (newHome && mover !== 0 && Math.random() < 0.3) addChat(mover, botComment("home"));
+    if (newHome && mover !== 0 && Math.random() < 0.3) addChat(mover, botComment("home", personaOf(mover)));
     if (after.phase === "gameOver" && after.winner !== null) {
-      addChat(1, botComment(after.winner === 1 ? "win" : "lose"));
-      addChat(2, botComment(after.winner === 0 ? "win" : "lose"));
+      addChat(1, botComment(after.winner === 1 ? "win" : "lose", personaOf(1)));
+      addChat(2, botComment(after.winner === 0 ? "win" : "lose", personaOf(2)));
     }
   };
 
@@ -208,7 +211,7 @@ export const useGameStore = create<Store>()((set, get) => {
   const botSwaps = () => {
     let g = get().game;
     if (!g || g.phase !== "swap") return;
-    for (const p of [1, 2, 3]) if (!g.swapSelections[p]) g = selectSwap(g, p, chooseSwapCard(g, p, g.players[p].difficulty));
+    for (const p of [1, 2, 3]) if (!g.swapSelections[p]) g = selectSwap(g, p, chooseSwapCard(g, p, g.players[p].difficulty, styleOf(g.players[p].persona)));
     set({ game: g });
   };
 
@@ -232,13 +235,13 @@ export const useGameStore = create<Store>()((set, get) => {
     botTimer = setTimeout(() => {
       const cur = get().game;
       if (!cur || cur !== g) return;
-      const mv = chooseMove(cur, cur.players[d].difficulty);
+      const mv = chooseMove(cur, cur.players[d].difficulty, styleOf(cur.players[d].persona));
       if (mv) commit(mv);
     }, afterMs + 650 / speed);
   };
 
   return {
-    settings: { playerName: "Du", difficulty: "medium", master: false, speed: 1 },
+    settings: { playerName: "Du", difficulty: "medium", master: false, speed: 1, bots: DEFAULT_BOTS },
     sound: true,
     game: null,
     anim: null,
@@ -258,7 +261,12 @@ export const useGameStore = create<Store>()((set, get) => {
       const game = newGame(settings);
       chatId = 0;
       set({ settings, game, anim: null, selectedCardId: null, selectedMarble: null, seven: null, chat: [], emotes: [], moods: idleMoods(), fx: null });
-      addChat(2, `Hallo ${game.players[0].name}! Auf gute Zusammenarbeit 🤝`);
+      // Begrüßung: erst der Partner, dann die Gegner im Tonfall ihres Charakters
+      [2, 1, 3].forEach((p, i) => {
+        const greet = personaById(game.players[p].persona)?.lines.greet;
+        const text = greet ? pick(greet) : `Hallo ${game.players[0].name}! Auf gute Zusammenarbeit 🤝`;
+        setTimeout(() => addChat(p, text), 400 + i * 1100);
+      });
       announce(game);
       schedule();
     },
