@@ -30,6 +30,8 @@ npm run simulate -- 80 medium,medium --personas graf,neutral   # Charakter gegen
 | `lib/personas.ts` | Bot-Charaktere: Beschreibung, Sprüche und Spielweise (Gewichte für die KI) |
 | `lib/audio.ts` | Soundeffekte per Web Audio API (synthetisch, keine Dateien) |
 | `lib/haptics.ts` | Vibrations-Feedback auf Mobilgeräten |
+| `lib/saves.ts` | Spielstände im localStorage (Token je Partie) |
+| `app/spiel/[id]/page.tsx` | Spielseite – lädt beim Neuladen den gespeicherten Stand |
 
 Sound und Vibration starten erst nach der ersten Nutzer-Geste – vorher blockiert der Browser beides.
 
@@ -42,6 +44,13 @@ Die Engine ist rein funktional: `legalMoves(state)` liefert alle erlaubten Züge
 - **Schwer:** zusätzlich Gefahrenanalyse (Abstände zu gegnerischen Kugeln, gegnerische Startfelder), TAC wird aufgehoben, wenn er wenig bringt, kluger Kartentausch mit dem Partner und Planung von Kartenkombinationen aus der eigenen Hand (z. B. eröffnen, dann mit der 4 rückwärts).
 
 Ergebnisse aus Bot-gegen-Bot-Simulationen: Schwer schlägt Mittel in rund 63 % der Partien, Mittel schlägt Leicht in fast allen.
+
+## Bedienung
+
+- **Startbildschirm** als Assistent: Titel → Name → Partner → Gegner → Spielart. Gespeicherte Einstellungen werden vorausgefüllt.
+- **Magnetisches Tippen:** Ein Tipp in die Nähe einer leuchtenden Kugel oder eines Zielfelds rastet auf das nächstgelegene gültige Ziel ein (Fangradius ≈ zwei Felder). Mit der Maus zeigt ein Leuchtring und eine Geisterkugel vorab, was ein Klick bewirkt.
+- **Lupe am Handy:** Solange der Finger auf dem Brett liegt, zeigt eine Lupe den Bereich vergrößert samt eingerastetem Ziel; Loslassen führt den Zug aus, Wegziehen ins Leere bricht ab.
+- **Spielstand:** Jede Partie läuft unter `/spiel/<token>` und wird laufend im Browser gespeichert. Neuladen setzt das Spiel fort, im Hauptmenü gibt es „Weiterspielen“. Die letzten fünf Partien bleiben erhalten (nur auf demselben Gerät/Browser).
 
 ## Charaktere
 

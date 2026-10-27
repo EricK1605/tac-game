@@ -11,6 +11,7 @@ import { setSoundEnabled, sfx } from "@/lib/audio";
 import { haptics } from "@/lib/haptics";
 import { DEFAULT_BOTS, personaById, styleOf } from "@/lib/personas";
 import type { Mood } from "@/components/Character";
+import { newGameId, persist, readSave } from "@/lib/saves";
 
 export const STEP_MS = 95;
 
@@ -61,8 +62,13 @@ interface Store {
   emotes: Emote[];
   fx: FxEvent | null;
   drawerOpen: boolean;
+  /** Token der laufenden Spielsitzung (Teil der URL /spiel/<token>) */
+  gameId: string | null;
 
-  start: (settings: GameSettings) => void;
+  /** Startet ein neues Spiel und liefert dessen Token. */
+  start: (settings: GameSettings) => string;
+  /** Lädt einen gespeicherten Spielstand – false, wenn es ihn nicht gibt. */
+  resume: (id: string) => boolean;
   quit: () => void;
   selectCard: (id: string | null) => void;
   selectMarble: (id: number | null) => void;
@@ -255,12 +261,14 @@ export const useGameStore = create<Store>()((set, get) => {
     emotes: [],
     fx: null,
     drawerOpen: false,
+    gameId: null,
 
     start: (settings) => {
       sfx.card();
       const game = newGame(settings);
+      const gameId = newGameId();
       chatId = 0;
-      set({ settings, game, anim: null, selectedCardId: null, selectedMarble: null, seven: null, chat: [], emotes: [], moods: idleMoods(), fx: null });
+      set({ settings, game, gameId, anim: null, selectedCardId: null, selectedMarble: null, seven: null, chat: [], emotes: [], moods: idleMoods(), fx: null });
       // Begrüßung: erst der Partner, dann die Gegner im Tonfall ihres Charakters
       [2, 1, 3].forEach((p, i) => {
         const greet = personaById(game.players[p].persona)?.lines.greet;
@@ -269,11 +277,36 @@ export const useGameStore = create<Store>()((set, get) => {
       });
       announce(game);
       schedule();
+      return gameId;
     },
 
+    resume: (id) => {
+      const save = readSave(id);
+      if (!save) return false;
+      if (botTimer) clearTimeout(botTimer);
+      chatId = save.chat.reduce((n, c) => Math.max(n, c.id + 1), 0);
+      set({
+        settings: save.settings,
+        game: save.game,
+        gameId: id,
+        chat: save.chat,
+        anim: null,
+        selectedCardId: null,
+        selectedMarble: null,
+        seven: null,
+        emotes: [],
+        moods: idleMoods(),
+        fx: null,
+        thinking: false,
+      });
+      schedule(500);
+      return true;
+    },
+
+    // Der Spielstand bleibt gespeichert – über „Weiterspielen“ geht es später weiter.
     quit: () => {
       if (botTimer) clearTimeout(botTimer);
-      set({ game: null, anim: null, seven: null, selectedCardId: null });
+      set({ game: null, gameId: null, anim: null, seven: null, selectedCardId: null, thinking: false });
     },
 
     selectCard: (id) => {
@@ -392,3 +425,18 @@ export const useGameStore = create<Store>()((set, get) => {
     setDrawerOpen: (v) => set({ drawerOpen: v }),
   };
 });
+
+// Spielstand automatisch speichern (nur im Browser): kurz nach jeder Änderung und beim Verlassen der Seite.
+if (typeof window !== "undefined") {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const save = () => {
+    const { game, gameId, chat, settings } = useGameStore.getState();
+    persist({ game, gameId, chat, settings });
+  };
+  useGameStore.subscribe((s, prev) => {
+    if (s.game === prev.game && s.chat === prev.chat && s.settings === prev.settings) return;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(save, 250);
+  });
+  window.addEventListener("pagehide", save);
+}

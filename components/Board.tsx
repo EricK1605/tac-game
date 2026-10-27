@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, type ReactNode } from "react";
+import { memo, useMemo, useRef, useState, type ReactNode } from "react";
 import { motion } from "framer-motion";
 import type { Marble } from "@/types/game";
 import { PLAYER_COLORS, startOf } from "@/lib/engine/constants";
@@ -19,6 +19,7 @@ import {
   type Pt,
 } from "@/lib/layout";
 import { STEP_MS, type AnimSpec } from "@/store/gameStore";
+import { haptics } from "@/lib/haptics";
 
 export interface BoardTarget {
   key: string;
@@ -45,6 +46,31 @@ interface AnimInfo {
   duration: number;
 }
 
+/** Fangradius fürs magnetische Tippen (SVG-Einheiten, Brett = 1000). Feldabstand ≈ 40. */
+const SNAP_R = 95;
+/** Lupe am Handy: Durchmesser in px und Vergrößerung. */
+const LOUPE_PX = 132;
+const LOUPE_ZOOM = 2.4;
+
+interface Candidate {
+  key: string;
+  point: Pt;
+  act: () => void;
+  kind: "target" | "marble";
+  variant?: BoardTarget["variant"];
+}
+
+interface Aim {
+  /** Finger-/Mausposition in SVG-Koordinaten */
+  x: number;
+  y: number;
+  /** und in Pixeln relativ zum Brett (für die Lupe) */
+  px: number;
+  py: number;
+  cand: Candidate | null;
+  touch: boolean;
+}
+
 export function Board({ marbles, anim, selectable, selected, targets, onMarbleClick, activeColor, preview, overlay }: Props) {
   const animMap = useMemo(() => {
     const map = new Map<number, AnimInfo>();
@@ -65,28 +91,101 @@ export function Board({ marbles, anim, selectable, selected, targets, onMarbleCl
     return map;
   }, [anim]);
 
+  // Alles Antippbare: Zielfelder und auswählbare Kugeln. Getroffen wird das nächstgelegene – Felder müssen nicht exakt getroffen werden.
+  const candidates = useMemo<Candidate[]>(
+    () => [
+      ...targets.map((t) => ({ key: `t-${t.key}`, point: t.point, act: t.onClick, kind: "target" as const, variant: t.variant })),
+      ...marbles.filter((m) => selectable.has(m.id)).map((m) => ({ key: `m-${m.id}`, point: marblePoint(m), act: () => onMarbleClick(m.id), kind: "marble" as const })),
+    ],
+    [targets, marbles, selectable, onMarbleClick],
+  );
+
+  const svgRef = useRef<SVGSVGElement>(null);
+  const pressed = useRef(false);
+  const [aim, setAim] = useState<Aim | null>(null);
+
+  const nearest = (x: number, y: number): Candidate | null => {
+    let best: Candidate | null = null;
+    let bestD = SNAP_R;
+    for (const c of candidates) {
+      // Zielfelder leicht bevorzugen: sie sind der eigentliche Zug
+      const d = Math.hypot(c.point.x - x, c.point.y - y) * (c.kind === "target" ? 0.85 : 1);
+      if (d < bestD) {
+        bestD = d;
+        best = c;
+      }
+    }
+    return best;
+  };
+
+  const measure = (e: React.PointerEvent, touch: boolean): Aim | null => {
+    const svg = svgRef.current;
+    const ctm = svg?.getScreenCTM();
+    if (!svg || !ctm) return null;
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(ctm.inverse());
+    const rect = svg.getBoundingClientRect();
+    return { x: p.x, y: p.y, px: e.clientX - rect.left, py: e.clientY - rect.top, cand: nearest(p.x, p.y), touch };
+  };
+
+  const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!candidates.length) return;
+    pressed.current = true;
+    const touch = e.pointerType !== "mouse";
+    if (touch) e.currentTarget.setPointerCapture(e.pointerId);
+    const a = measure(e, touch);
+    setAim(a);
+    if (touch && a?.cand) haptics.tap();
+  };
+  const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    const touch = e.pointerType !== "mouse";
+    if (touch && !pressed.current) return;
+    const a = measure(e, touch);
+    // Beim Wechsel des Ziels kurz vibrieren – wie ein spürbares Einrasten
+    if (touch && a?.cand && a.cand.key !== aim?.cand?.key) haptics.tap();
+    setAim(a);
+  };
+  const onPointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!pressed.current) return;
+    pressed.current = false;
+    const touch = e.pointerType !== "mouse";
+    const a = measure(e, touch);
+    setAim(touch ? null : a);
+    a?.cand?.act();
+  };
+  const cancel = () => {
+    pressed.current = false;
+    setAim(null);
+  };
+
+  const selMarble = selected !== null ? marbles[selected] : null;
+  const ghost = aim?.cand?.kind === "target" && aim.cand.variant !== "swap" && selMarble ? selMarble.color : null;
+
   return (
     <div className="relative aspect-square w-full select-none">
-      <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="h-full w-full drop-shadow-[0_10px_22px_rgba(0,0,0,0.5)]">
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${SIZE} ${SIZE}`}
+        className={`h-full w-full drop-shadow-[0_10px_22px_rgba(0,0,0,0.5)] ${aim?.cand ? "cursor-pointer" : ""}`}
+        style={{ touchAction: candidates.length ? "none" : "auto" }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={cancel}
+        onPointerLeave={(e) => e.pointerType === "mouse" && cancel()}
+      >
         <BoardDefs />
-        <StaticBoard activeColor={activeColor} />
+        <g id="tac-board-layer">
+          <StaticBoard activeColor={activeColor} />
 
-        {/* Kugeln */}
-        {marbles.map((m) => (
-          <MarbleView
-            key={m.id}
-            m={m}
-            anim={animMap.get(m.id)}
-            selectable={selectable.has(m.id)}
-            selected={selected === m.id}
-            onClick={() => onMarbleClick(m.id)}
-          />
-        ))}
+          {/* Kugeln */}
+          {marbles.map((m) => (
+            <MarbleView key={m.id} m={m} anim={animMap.get(m.id)} selectable={selectable.has(m.id)} selected={selected === m.id} />
+          ))}
 
-        {/* Zielfelder – über den Kugeln, damit Schlag- und Tauschziele klickbar bleiben */}
-        {targets.map((t) => (
-          <g key={t.key} onClick={t.onClick} className="cursor-pointer">
+          {/* Zielfelder – über den Kugeln, damit Schlag- und Tauschziele sichtbar bleiben */}
+          {targets.map((t) => (
             <motion.circle
+              key={t.key}
               cx={t.point.x}
               cy={t.point.y}
               r={HOLE_R + 6}
@@ -98,11 +197,21 @@ export function Board({ marbles, anim, selectable, selected, targets, onMarbleCl
               transition={{ opacity: { repeat: Infinity, duration: 1.2 }, scale: { duration: 0.2 } }}
               style={{ transformOrigin: `${t.point.x}px ${t.point.y}px` }}
             />
-            <circle cx={t.point.x} cy={t.point.y} r={HOLE_R + 10} fill="transparent" />
-          </g>
-        ))}
+          ))}
 
+          {/* Eingerastetes Ziel: Geisterkugel und Leuchtring */}
+          {aim?.cand && (
+            <g pointerEvents="none">
+              {ghost !== null && <circle cx={aim.cand.point.x} cy={aim.cand.point.y} r={MARBLE_R} fill={`url(#marble-${ghost})`} opacity={0.6} />}
+              <circle cx={aim.cand.point.x} cy={aim.cand.point.y} r={HOLE_R + 11} fill="none" stroke="#fff" strokeWidth={4} opacity={0.95} />
+              <circle cx={aim.cand.point.x} cy={aim.cand.point.y} r={HOLE_R + 17} fill="none" stroke="#fde047" strokeWidth={2.5} opacity={0.7} />
+            </g>
+          )}
+        </g>
       </svg>
+
+      {aim?.touch && <Loupe aim={aim} boardPx={svgRef.current?.getBoundingClientRect().width ?? 1} />}
+
       {preview && (
         <div className="pointer-events-none absolute left-1/2 top-[30%] -translate-x-1/2 rounded-full bg-black/70 px-3 py-1 text-xs font-semibold text-amber-200 shadow-lg backdrop-blur">
           {preview}
@@ -113,18 +222,44 @@ export function Board({ marbles, anim, selectable, selected, targets, onMarbleCl
   );
 }
 
+/** Lupe über dem Finger: zeigt vergrößert, worauf man gerade zielt (der Finger verdeckt sonst die kleinen Felder). */
+function Loupe({ aim, boardPx }: { aim: Aim; boardPx: number }) {
+  const span = (LOUPE_PX * (SIZE / boardPx)) / LOUPE_ZOOM;
+  const center = aim.cand?.point ?? { x: aim.x, y: aim.y };
+  // Über dem Finger; ganz oben am Brett stattdessen daneben, damit die Lupe sichtbar bleibt
+  const above = aim.py - LOUPE_PX - 40 > -60;
+  const left = Math.min(Math.max(aim.px - LOUPE_PX / 2, -20), boardPx - LOUPE_PX + 20);
+  const top = above ? aim.py - LOUPE_PX - 40 : aim.py - LOUPE_PX / 2;
+  const sideLeft = above ? left : aim.px > boardPx / 2 ? aim.px - LOUPE_PX - 50 : aim.px + 50;
+
+  return (
+    <motion.div
+      initial={{ scale: 0.4, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ type: "spring", stiffness: 500, damping: 30 }}
+      className="pointer-events-none absolute z-50 overflow-hidden rounded-full border-4 border-white bg-[#a96e37] shadow-[0_10px_30px_rgba(0,0,0,0.6)]"
+      style={{ width: LOUPE_PX, height: LOUPE_PX, left: sideLeft, top }}
+    >
+      <svg viewBox={`${center.x - span / 2} ${center.y - span / 2} ${span} ${span}`} width="100%" height="100%">
+        <use href="#tac-board-layer" />
+      </svg>
+      {!aim.cand && (
+        <div className="absolute inset-x-0 bottom-3 text-center text-[10px] font-bold uppercase tracking-wider text-white drop-shadow">kein Ziel</div>
+      )}
+    </motion.div>
+  );
+}
+
 const MarbleView = memo(function MarbleView({
   m,
   anim,
   selectable,
   selected,
-  onClick,
 }: {
   m: Marble;
   anim?: AnimInfo;
   selectable: boolean;
   selected: boolean;
-  onClick: () => void;
 }) {
   const final = marblePoint(m);
   const last = anim?.pts[anim.pts.length - 1];
@@ -134,8 +269,6 @@ const MarbleView = memo(function MarbleView({
       initial={false}
       animate={useAnim ? { x: anim.pts.map((p) => p.x), y: anim.pts.map((p) => p.y) } : { x: final.x, y: final.y }}
       transition={useAnim ? { duration: Math.max(anim.duration, 0.2), delay: anim.delay, ease: "linear" } : { type: "spring", stiffness: 160, damping: 22 }}
-      onClick={selectable ? onClick : undefined}
-      className={selectable ? "cursor-pointer" : ""}
     >
       {selectable && (
         <motion.circle

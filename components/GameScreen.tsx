@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useAnimationControls } from "framer-motion";
 import { BookOpen, Home, RotateCcw, Trophy, Volume2, VolumeX } from "lucide-react";
 import type { GameState } from "@/types/game";
@@ -28,6 +29,12 @@ export function GameScreen() {
   const quit = useGameStore((s) => s.quit);
   const settings = useGameStore((s) => s.settings);
   const controls = useTurnControls();
+  const router = useRouter();
+  // Zurück ins Menü – der Spielstand bleibt gespeichert
+  const toMenu = () => {
+    router.push("/");
+    quit();
+  };
 
   const active = game.phase === "play" ? decider(game) : null;
   const fx = useGameStore((s) => s.fx);
@@ -68,7 +75,7 @@ export function GameScreen() {
           <IconButton onClick={toggleSound} label={sound ? "Ton aus" : "Ton an"}>
             {sound ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
           </IconButton>
-          <IconButton onClick={quit} label="Hauptmenü">
+          <IconButton onClick={toMenu} label="Hauptmenü">
             <Home className="h-4 w-4" />
           </IconButton>
         </div>
@@ -253,6 +260,7 @@ function GameOverModal({ game }: { game: GameState }) {
   const start = useGameStore((s) => s.start);
   const settings = useGameStore((s) => s.settings);
   const quit = useGameStore((s) => s.quit);
+  const router = useRouter();
   const won = game.winner === 0;
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
@@ -274,10 +282,16 @@ function GameOverModal({ game }: { game: GameState }) {
           {TEAM_NAMES[game.winner ?? 0]} hat alle acht Kugeln nach Hause gebracht{won ? " – starkes Teamspiel!" : "."}
         </p>
         <div className="mt-6 flex justify-center gap-3">
-          <button onClick={() => start(settings)} className="chunky-btn chunky-green flex items-center gap-2 rounded-2xl px-6 py-3 text-lg">
+          <button onClick={() => router.replace(`/spiel/${start(settings)}`)} className="chunky-btn chunky-green flex items-center gap-2 rounded-2xl px-6 py-3 text-lg">
             <RotateCcw className="h-4 w-4" /> Nochmal
           </button>
-          <button onClick={quit} className="chunky-btn chunky-dark rounded-2xl px-6 py-3 text-lg">
+          <button
+            onClick={() => {
+              router.push("/");
+              quit();
+            }}
+            className="chunky-btn chunky-dark rounded-2xl px-6 py-3 text-lg"
+          >
             Hauptmenü
           </button>
         </div>

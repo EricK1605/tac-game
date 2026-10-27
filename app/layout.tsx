@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Lilita_One } from "next/font/google";
+import { Providers } from "@/components/Providers";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -36,7 +37,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="de">
-      <body className={`${geistSans.variable} ${display.variable} antialiased`}>{children}</body>
+      <body className={`${geistSans.variable} ${display.variable} antialiased`}>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

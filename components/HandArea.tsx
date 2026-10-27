@@ -131,7 +131,7 @@ function InstructionBar({ game, controls }: { game: GameState; controls: Control
     else if (controls.mustDiscard) text = "Kein Zug möglich – wähle eine Karte und lege sie ab";
     else if (!card) text = "Du bist dran – wähle eine Karte";
     else if (controls.segmentsLeft) text = "Wähle eine Kugel und ein Ziel – die 7 kann beliebig aufgeteilt werden";
-    else if (controls.selectable.size) text = `${cardLabel(card.value)}: ${CARD_HINT[String(card.value)]} – klicke eine leuchtende Kugel, dann das Ziel`;
+    else if (controls.selectable.size) text = `${cardLabel(card.value)}: ${CARD_HINT[String(card.value)]} – tippe eine leuchtende Kugel an, dann das Ziel (knapp daneben reicht)`;
     else text = `${cardLabel(card.value)}: ${CARD_HINT[String(card.value)]}`;
   }
 
