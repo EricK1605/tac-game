@@ -9,6 +9,8 @@ export function setSoundEnabled(on: boolean) {
 
 function ac(): AudioContext | null {
   if (typeof window === "undefined" || !enabled) return null;
+  // Vor der ersten Nutzer-Geste blockiert der Browser Audio (und warnt in der Konsole)
+  if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return null;
   if (!ctx) {
     const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!Ctor) return null;

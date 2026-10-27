@@ -1,12 +1,13 @@
 // Haptisches Feedback (Vibration) auf unterstützten Geräten – auf dem Desktop ein No-op.
 
 function vibrate(pattern: number | number[]) {
-  if (typeof navigator !== "undefined" && "vibrate" in navigator) {
-    try {
-      navigator.vibrate(pattern);
-    } catch {
-      /* manche Browser verbieten Vibration ohne Nutzer-Geste */
-    }
+  if (typeof navigator === "undefined" || !("vibrate" in navigator)) return;
+  // Ohne vorherige Nutzer-Geste blockiert Chrome die Vibration und meldet einen Konsolenfehler
+  if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return;
+  try {
+    navigator.vibrate(pattern);
+  } catch {
+    /* manche Browser verbieten Vibration trotzdem */
   }
 }
 

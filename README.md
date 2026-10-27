@@ -21,9 +21,14 @@ npm run simulate -- 50 hard,easy master
 | `lib/engine/moves.ts` | Zuggenerierung für jede Karte inkl. 7-Aufteilung, Trickser, TAC, Meisterkarten |
 | `lib/engine/game.ts` | Ablauf: Geben, Melden, Tauschen, Züge, Aussetzen, Teufel/Narr, Sieg (inkl. TAC gegen Siegeszug) |
 | `lib/ai/botEngine.ts` | KI in drei Stufen |
-| `store/gameStore.ts` | Zustand-Store, Bot-Schleife, Sounds, Chat-Reaktionen |
+| `store/gameStore.ts` | Zustand-Store, Bot-Schleife, Sounds, Chat-Reaktionen, Stimmungen, Emotes, Effekt-Ereignisse |
 | `components/` | Brett (SVG + Framer Motion), Hand, Verlauf/Chat, Regelbuch, Startbildschirm |
+| `components/Arena.tsx` | Arena-Ansicht: Spieler-Portraits am Brettrand, Emote- und Chat-Blasen, Effekt-Einblendungen (Rauswurf, Haus, TAC, Sieg), Emote-Knopf, Schublade für Verlauf/Chat auf kleinen Bildschirmen |
+| `components/Character.tsx` | Comic-Figuren der vier Spieler (Ritter, Zauberer, Bogenschützin, Prinzessin) mit Stimmungen |
 | `lib/audio.ts` | Soundeffekte per Web Audio API (synthetisch, keine Dateien) |
+| `lib/haptics.ts` | Vibrations-Feedback auf Mobilgeräten |
+
+Sound und Vibration starten erst nach der ersten Nutzer-Geste – vorher blockiert der Browser beides.
 
 Die Engine ist rein funktional: `legalMoves(state)` liefert alle erlaubten Züge mit fertigem Ergebnisbrett, `applyMove(state, move)` erzeugt den nächsten Zustand. UI und Bots wählen nur aus dieser Liste – ungültige Züge sind damit ausgeschlossen.
 
