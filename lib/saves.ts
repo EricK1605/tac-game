@@ -65,8 +65,9 @@ export function persist({ game, gameId, chat, settings }: { game: GameState | nu
   const st = storage();
   if (!st) return;
   try {
-    st.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    // Ohne laufendes Spiel nichts schreiben – sonst überschreiben Standardwerte beim Neuladen die gespeicherten Einstellungen
     if (!game || !gameId) return;
+    st.setItem(SETTINGS_KEY, JSON.stringify(settings));
     const save: SaveFile = { v: 1, id: gameId, settings, game, chat: chat.slice(-40), savedAt: Date.now() };
     st.setItem(SAVE_PREFIX + gameId, JSON.stringify(save));
     st.setItem(LAST_KEY, gameId);

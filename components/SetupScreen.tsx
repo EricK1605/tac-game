@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, BookOpen, Brain, Crown, Dices, Gauge, Play, RotateCcw, Sparkles, Swords } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, ChevronDown, Brain, Crown, Dices, Gauge, Play, RotateCcw, Sparkles, Swords } from "lucide-react";
 import type { Difficulty } from "@/types/game";
 import { useGameStore } from "@/store/gameStore";
 import { PLAYER_COLORS } from "@/lib/engine/constants";
@@ -170,14 +170,17 @@ function TitleScreen({ resumable, onNew, onResume, onRules }: { resumable: SaveF
           </motion.div>
         ))}
       </div>
-      <motion.h1
+      {/* Logo – die H1 der Seite steht im Info-Bereich darunter */}
+      <motion.div
+        role="img"
+        aria-label="TAC"
         initial={{ scale: 0.6, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 300, damping: 14, delay: 0.2 }}
         className="font-display text-stroke-lg text-8xl text-amber-200 drop-shadow-[0_6px_0_rgba(0,0,0,0.35)]"
       >
         T<span className="text-red-500">A</span>C
-      </motion.h1>
+      </motion.div>
       <p className="max-w-sm text-amber-100/70">Das taktische Karten- und Brettspiel für zwei Teams. Bring mit deinem Partner alle acht Kugeln nach Hause!</p>
       <div className="flex -space-x-2">
         {PERSONAS.map((p, i) => (
@@ -210,6 +213,10 @@ function TitleScreen({ resumable, onNew, onResume, onRules }: { resumable: SaveF
           <BookOpen className="h-5 w-5" /> Wie spiele ich TAC?
         </button>
       </div>
+      <a href="#ueber-tac" className="flex flex-col items-center text-xs font-semibold text-amber-100/40 transition hover:text-amber-100/70">
+        Mehr über TAC
+        <ChevronDown className="h-4 w-4 animate-bounce" />
+      </a>
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { PLAYER_COLORS, TEAM_NAMES, isHome, teamOf } from "@/lib/engine/constant
 import { decider } from "@/lib/engine/moves";
 import { haptics } from "@/lib/haptics";
 import { lookOf } from "@/lib/personas";
+import { AdSlot } from "./AdSlot";
 import { EmoteButton, FxOverlay, PlayerPlate, SidebarDrawer } from "./Arena";
 import { Board } from "./Board";
 import { CardFace } from "./CardView";
@@ -81,43 +82,51 @@ export function GameScreen() {
         </div>
       </header>
 
-      <main className="mx-auto grid w-full max-w-[1500px] flex-1 grid-cols-1 gap-4 px-2 pb-20 sm:px-4 lg:grid-cols-[1fr_340px] lg:pb-3">
-        <div className="flex min-w-0 flex-col items-center gap-2">
-          {/*
-            Brettgröße = Bildschirmhöhe minus Kopfzeile, Handbereich und – bis xl – die Spielerkarten über und unter dem Brett.
-            Ab xl sitzen die Spielerkarten links und rechts, dafür wird Breite freigehalten.
-          */}
-          <div className="relative my-[70px] w-full min-w-[300px] max-w-[min(98vw,calc(100dvh-380px))] md:max-w-[min(96vw,calc(100dvh-370px))] xl:my-1 xl:max-w-[min(calc(100%-340px),calc(100dvh-258px))]">
-            <motion.div animate={shake}>
-              <Board
-                marbles={controls.displayBoard}
-                anim={anim}
-                selectable={controls.selectable}
-                selected={controls.selected}
-                targets={controls.targets}
-                onMarbleClick={controls.onMarbleClick}
-                activeColor={active}
-                preview={controls.preview}
-                overlay={
-                  <>
-                    <CenterPile game={game} />
-                    <FxOverlay game={game} />
-                    <TurnBanner game={game} humanTurn={controls.humanTurn} />
-                  </>
-                }
-              />
-            </motion.div>
-            {[0, 1, 2, 3].map((p) => (
-              <PlayerPlate key={p} game={game} player={p} active={active === p} />
-            ))}
+      {/*
+        Werbeflächen: ab 1700 px als Sidebar links und rechts vom Spiel,
+        darunter wandern sie per `order` als Banner unter das Spiel.
+      */}
+      <div className="mx-auto flex w-full max-w-[1500px] flex-1 flex-col gap-4 px-2 pb-20 sm:px-4 lg:pb-3 min-[1700px]:max-w-[1900px] min-[1700px]:flex-row min-[1700px]:items-start">
+        <AdSlot slot="spiel-links" className="order-2 min-[1700px]:order-none" />
+        <main className="grid w-full min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[1fr_340px]">
+          <div className="flex min-w-0 flex-col items-center gap-2">
+            {/*
+              Brettgröße = Bildschirmhöhe minus Kopfzeile, Handbereich und – bis xl – die Spielerkarten über und unter dem Brett.
+              Ab xl sitzen die Spielerkarten links und rechts, dafür wird Breite freigehalten.
+            */}
+            <div className="relative my-[70px] w-full min-w-[300px] max-w-[min(98vw,calc(100dvh-380px))] md:max-w-[min(96vw,calc(100dvh-370px))] xl:my-1 xl:max-w-[min(calc(100%-340px),calc(100dvh-258px))]">
+              <motion.div animate={shake}>
+                <Board
+                  marbles={controls.displayBoard}
+                  anim={anim}
+                  selectable={controls.selectable}
+                  selected={controls.selected}
+                  targets={controls.targets}
+                  onMarbleClick={controls.onMarbleClick}
+                  activeColor={active}
+                  preview={controls.preview}
+                  overlay={
+                    <>
+                      <CenterPile game={game} />
+                      <FxOverlay game={game} />
+                      <TurnBanner game={game} humanTurn={controls.humanTurn} />
+                    </>
+                  }
+                />
+              </motion.div>
+              {[0, 1, 2, 3].map((p) => (
+                <PlayerPlate key={p} game={game} player={p} active={active === p} />
+              ))}
+            </div>
+            <HandArea game={game} controls={controls} />
           </div>
-          <HandArea game={game} controls={controls} />
-        </div>
 
-        <aside className="hidden lg:sticky lg:top-2 lg:block lg:h-[calc(100dvh-80px)]">
-          <Sidebar game={game} />
-        </aside>
-      </main>
+          <aside className="hidden lg:sticky lg:top-2 lg:block lg:h-[calc(100dvh-80px)]">
+            <Sidebar game={game} />
+          </aside>
+        </main>
+        <AdSlot slot="spiel-rechts" className="order-3" />
+      </div>
 
       <EmoteButton />
       <SidebarDrawer game={game} />

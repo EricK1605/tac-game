@@ -32,6 +32,9 @@ npm run simulate -- 80 medium,medium --personas graf,neutral   # Charakter gegen
 | `lib/haptics.ts` | Vibrations-Feedback auf Mobilgeräten |
 | `lib/saves.ts` | Spielstände im localStorage (Token je Partie) |
 | `app/spiel/[id]/page.tsx` | Spielseite – lädt beim Neuladen den gespeicherten Stand |
+| `components/SeoSection.tsx` | Info-/SEO-Bereich mit FAQ (Server-Komponente, strukturierte Daten auf der Startseite) |
+| `components/AdSlot.tsx` | Platzhalter für Google AdSense – ab 1700 px Sidebar links/rechts, darunter Banner unter dem Spiel (Einbau-Anleitung im Kommentar) |
+| `app/robots.ts`, `app/sitemap.ts`, `lib/site.ts` | Suchmaschinen-Einstellungen; Spielseiten `/spiel/*` sind `noindex` |
 
 Sound und Vibration starten erst nach der ersten Nutzer-Geste – vorher blockiert der Browser beides.
 

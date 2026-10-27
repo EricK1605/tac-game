@@ -85,11 +85,12 @@ export function PlayerPlate({ game, player, active }: { game: GameState; player:
         </div>
 
         <div className={`flex min-w-0 flex-col ${right ? "items-end" : "items-start"} xl:items-center`}>
-          <span className="font-display text-stroke flex items-center gap-1 truncate text-[13px] leading-tight text-white sm:text-sm">
-            {p.name}
+          {/* max-w-full: lange Namen/Titel werden gekürzt statt aus der Karte zu ragen */}
+          <span className="font-display text-stroke flex max-w-full items-center gap-1 text-[13px] leading-tight text-white sm:text-sm">
+            <span className="truncate">{p.name}</span>
             {teamOf(player) === 0 && player !== 0 && <Crown className="h-3 w-3 shrink-0 text-amber-300" aria-label="Partner" />}
           </span>
-          <span className="truncate text-[9px] font-bold uppercase leading-tight tracking-wider" style={{ color: col.light }}>
+          <span className="block max-w-full truncate text-[9px] font-bold uppercase leading-tight tracking-wider" style={{ color: col.light }}>
             {title}
           </span>
           <div className="mt-0.5 flex h-4 items-center gap-1">
