@@ -5,10 +5,9 @@
  * Darunter (Handy, Tablet, Laptop): Banner unter dem Spiel – die Reihenfolge regelt das umgebende Layout per `order`.
  *
  * AdSense einbauen:
- *  1. In app/layout.tsx das Skript laden:
- *     <Script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-XXXX" crossOrigin="anonymous" strategy="afterInteractive" />
+ *  1. Das AdSense-Skript wird bereits in app/layout.tsx geladen (Publisher-ID in lib/site.ts).
  *  2. Hier den Platzhalter-Inhalt ersetzen durch
- *     <ins className="adsbygoogle block h-full w-full" data-ad-client="ca-pub-XXXX" data-ad-slot={slot} data-ad-format="auto" data-full-width-responsive="true" />
+ *     <ins className="adsbygoogle block h-full w-full" data-ad-client={ADSENSE_CLIENT} data-ad-slot={slot} data-ad-format="auto" data-full-width-responsive="true" />
  *     und nach dem Einhängen einmal `(window.adsbygoogle = window.adsbygoogle || []).push({})` aufrufen (Client-Komponente).
  */
 export function AdSlot({ slot, className = "" }: { slot: string; className?: string }) {
