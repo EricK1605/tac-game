@@ -45,6 +45,7 @@ export const metadata: Metadata = {
   },
   twitter: { card: "summary", title: "TAC Spiel Online kostenlos spielen", description: DESCRIPTION },
   robots: { index: true, follow: true },
+  verification: { google: "1WkSvEa97fT_RygDv4ZhxC7Qr-ruswmK_dnFtqrDOrg" },
   appleWebApp: { capable: true, title: "TAC", statusBarStyle: "black-translucent" },
 };
 
