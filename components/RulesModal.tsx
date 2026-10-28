@@ -179,7 +179,7 @@ export function RulesModal() {
             animate={{ y: 0, scale: 1 }}
             exit={{ y: 40, scale: 0.95 }}
             onClick={(e) => e.stopPropagation()}
-            className="flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-amber-200/20 bg-gradient-to-b from-[#2a1a0e] to-[#1a100a] shadow-2xl"
+            className="flex max-h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-amber-200/20 bg-gradient-to-b from-[#232a5c] to-[#151a3a] shadow-2xl"
           >
             <div className="flex items-center justify-between border-b border-amber-200/10 px-6 py-4">
               <h2 className="font-display text-2xl text-amber-50">{c.title}</h2>

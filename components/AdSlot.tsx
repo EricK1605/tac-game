@@ -15,7 +15,7 @@ export function AdSlot({ slot, className = "" }: { slot: string; className?: str
     <aside
       aria-label="Anzeige"
       data-ad-slot={slot}
-      className={`mx-auto flex h-[100px] w-full max-w-[728px] shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-amber-200/15 bg-black/20 sm:max-[1699px]:h-[90px] min-[1700px]:sticky min-[1700px]:top-4 min-[1700px]:mx-0 min-[1700px]:h-[600px] min-[1700px]:w-[160px] ${className}`}
+      className={`mx-auto flex h-[100px] w-full max-w-[728px] shrink-0 items-center justify-center rounded-2xl border-2 border-dashed border-white/10 bg-black/20 sm:max-[1699px]:h-[90px] min-[1700px]:sticky min-[1700px]:top-4 min-[1700px]:mx-0 min-[1700px]:h-[600px] min-[1700px]:w-[160px] ${className}`}
     >
       <div className="text-center text-[10px] font-semibold uppercase tracking-[0.2em] text-amber-100/30">
         Anzeige

@@ -32,10 +32,13 @@ export interface SevenBuilder {
   locked: number[];
 }
 
+/** Emotes sind die Figuren selbst in einer Stimmung – keine Standard-Emojis. */
+export type EmoteId = Exclude<Mood, "idle">;
+
 export interface Emote {
   id: number;
   player: number;
-  emoji: string;
+  emote: EmoteId;
   time: number;
 }
 
@@ -47,7 +50,8 @@ export interface FxEvent {
   victims: number[];
 }
 
-export const EMOTES = ["👍", "😂", "😎", "🔥", "👏", "😭", "😡", "😱", "🤔", "🙏"];
+export const EMOTES: EmoteId[] = ["happy", "signature", "wow", "think", "sad", "angry"];
+const isEmote = (e: unknown): e is EmoteId => EMOTES.includes(e as EmoteId);
 
 /**
  * local: alles läuft auf diesem Gerät (Klassisch, Orakel)
@@ -98,7 +102,7 @@ interface Store {
   /** Gastgeber: führt eine geprüfte Aktion eines Gastes aus. */
   hostAction: (a: RemoteAction) => void;
   /** Emote von einem anderen Gerät anzeigen. */
-  remoteEmote: (player: number, emoji: string) => void;
+  remoteEmote: (player: number, emote: unknown) => void;
   quit: () => void;
   selectCard: (id: string | null) => void;
   selectMarble: (id: number | null) => void;
@@ -109,7 +113,7 @@ interface Store {
   say: (text: string) => void;
   toggleSound: () => void;
   setShowRules: (v: boolean) => void;
-  emote: (emoji: string) => void;
+  emote: (emote: EmoteId) => void;
   setDrawerOpen: (v: boolean) => void;
 }
 
@@ -126,6 +130,16 @@ function animDuration(move: Move | null): number {
   if (!move) return 0;
   const longest = Math.max(0, ...move.anims.map((a) => a.path.length));
   return longest * STEP_MS + (move.captured.length ? 450 : 0);
+}
+
+/** Kugelzüge, bei denen es sonst nur Klicks ohne echte Wahl wären. */
+const AUTO_KINDS = new Set<Move["kind"]>(["enter", "steps", "seven", "swap", "warrior"]);
+
+/** Der einzige mögliche Kugelzug einer Karte – oder null, wenn es etwas zu entscheiden gibt. */
+function forcedMove(g: GameState, cardId: string): Move | null {
+  const moves = legalMoves(g).filter((m) => m.cardId === cardId);
+  if (!moves.length || !moves.every((m) => AUTO_KINDS.has(m.kind))) return null;
+  return new Set(moves.map((m) => boardKey(m.board))).size === 1 ? moves[0] : null;
 }
 
 /** Erster lokaler Platz, der beim Tauschen noch eine Karte wählen muss. */
@@ -146,13 +160,16 @@ export const useGameStore = create<Store>()((set, get) => {
       return { moods };
     });
 
-  const showEmote = (player: number, emoji: string) =>
-    set((s) => ({ emotes: [...s.emotes.slice(-20), { id: chatId++, player, emoji, time: Date.now() }] }));
+  // Die Figur spielt das Emote auch selbst
+  const showEmote = (player: number, emote: EmoteId) => {
+    set((s) => ({ emotes: [...s.emotes.slice(-20), { id: chatId++, player, emote, time: Date.now() }] }));
+    setMood(player, emote, 2200);
+  };
 
   /** Emote zeigen und – im Freunde-Modus – an alle anderen Geräte schicken. */
-  const addEmote = (player: number, emoji: string) => {
-    showEmote(player, emoji);
-    get().net?.send("emote", { player, emoji });
+  const addEmote = (player: number, emote: EmoteId) => {
+    showEmote(player, emote);
+    get().net?.send("emote", { player, emote });
   };
 
   const me = () => get().mySeats[0] ?? 0;
@@ -183,13 +200,14 @@ export const useGameStore = create<Store>()((set, get) => {
         haptics.capture();
         for (const v of victims) if (v !== mover) setMood(v, Math.random() < 0.5 ? "sad" : "angry", 2200);
         if (enemyVictims.length) {
-          setMood(mover, "happy", 1600);
+          // Wer rauswirft, zeigt sein Markenzeichen
+          setMood(mover, "signature", 2000);
           set({ fx: { id: fxId++, kind: "kick", player: mover, victims } });
           if (!emotes) return;
-          if (!before.players[mover].isHuman && Math.random() < 0.55) addEmote(mover, pick(["😎", "😂", "🔥"]));
-          for (const v of enemyVictims) if (!before.players[v].isHuman && Math.random() < 0.5) setTimeout(() => addEmote(v, pick(["😭", "😡", "😱"])), 700);
+          if (!before.players[mover].isHuman && Math.random() < 0.55) addEmote(mover, pick<EmoteId>(["signature", "happy"]));
+          for (const v of enemyVictims) if (!before.players[v].isHuman && Math.random() < 0.5) setTimeout(() => addEmote(v, pick<EmoteId>(["sad", "angry", "wow"])), 700);
           const partner = partnerOf(mover);
-          if (mine.includes(mover) && speaks(partner) && Math.random() < 0.6) setTimeout(() => addEmote(partner, pick(["👏", "🔥", "👍"])), 900);
+          if (mine.includes(mover) && speaks(partner) && Math.random() < 0.6) setTimeout(() => addEmote(partner, pick<EmoteId>(["happy", "signature"])), 900);
         }
         return;
       }
@@ -262,7 +280,7 @@ export const useGameStore = create<Store>()((set, get) => {
 
   /** Melden nach dem Geben – als Daumen-Emote über den Figuren mit Charakter. */
   const announce = (g: GameState) => {
-    for (const p of [1, 2, 3]) if (g.players[p].persona && !get().mySeats.includes(p)) setTimeout(() => addEmote(p, g.announcements[p] ? "👍" : "👎"), 300 + p * 250);
+    for (const p of [1, 2, 3]) if (g.players[p].persona && !get().mySeats.includes(p)) setTimeout(() => addEmote(p, g.announcements[p] ? "happy" : "sad"), 300 + p * 250);
   };
 
   const botSwaps = () => {
@@ -432,7 +450,9 @@ export const useGameStore = create<Store>()((set, get) => {
       if (mv) commit(mv);
     },
 
-    remoteEmote: (player, emoji) => showEmote(player, emoji),
+    remoteEmote: (player, emote) => {
+      if (isEmote(emote)) showEmote(player, emote);
+    },
 
     // Der Spielstand bleibt gespeichert – über „Weiterspielen“ geht es später weiter.
     quit: () => {
@@ -478,7 +498,13 @@ export const useGameStore = create<Store>()((set, get) => {
       }
       sfx.card();
       haptics.tap();
-      set({ selectedCardId: id, selectedMarble: null, seven });
+      // Führt die Karte nur zu einer einzigen Endstellung (z. B. eine 7 im Haus), wird sie automatisch gezogen
+      const forced = g.phase === "play" ? forcedMove(g, id) : null;
+      set({ selectedCardId: id, selectedMarble: null, seven: forced ? null : seven });
+      if (forced)
+        setTimeout(() => {
+          if (get().game === g && get().selectedCardId === id) get().playMove(forced);
+        }, 450);
     },
 
     selectMarble: (id) => {
@@ -589,15 +615,15 @@ export const useGameStore = create<Store>()((set, get) => {
 
     setShowRules: (v) => set({ showRules: v }),
 
-    emote: (emoji) => {
+    emote: (emote) => {
       haptics.tap();
       const seat = me();
-      addEmote(seat, emoji);
+      addEmote(seat, emote);
       const g = get().game;
       if (g && get().role !== "guest" && Math.random() < 0.45) {
-        const answer: Record<string, string[]> = { "😂": ["😂", "😎"], "😡": ["😂", "🙏"], "😭": ["🙏", "😂"], "👍": ["👍"], "🔥": ["🔥", "😎"] };
+        const answer: Partial<Record<EmoteId, EmoteId[]>> = { happy: ["happy", "signature"], signature: ["wow", "angry"], angry: ["happy", "think"], sad: ["happy"], wow: ["signature"] };
         const others = [0, 1, 2, 3].filter((p) => speaks(p) && !get().mySeats.includes(p));
-        if (others.length) setTimeout(() => addEmote(pick(others), pick(answer[emoji] ?? ["👍", "🤔"])), 900 + Math.random() * 800);
+        if (others.length) setTimeout(() => addEmote(pick(others), pick(answer[emote] ?? ["think", "happy"])), 900 + Math.random() * 800);
       }
     },
 

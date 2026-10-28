@@ -181,7 +181,7 @@ export function SetupScreen() {
                 {current === "friends" && <FriendsEntry onRoom={toRoom} />}
 
                 {/* Navigation – auf dem Handy unten angeheftet */}
-                <div className="sticky bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-10 -mx-2 mt-5 flex gap-2 rounded-2xl bg-[#1c120b]/90 p-2 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
+                <div className="sticky bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-10 -mx-2 mt-5 flex gap-2 rounded-2xl bg-[#171c3f]/90 p-2 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
                   <button onClick={() => go(step - 1)} className="chunky-btn chunky-dark flex items-center gap-1.5 rounded-2xl px-4 py-3" aria-label={t("back")}>
                     <ArrowLeft className="h-5 w-5" />
                   </button>
@@ -258,9 +258,10 @@ function TitleScreen({
             <span className="flex items-center gap-2 text-xl">
               <Play className="h-5 w-5" /> {t("setup.resume")}
             </span>
-            <span className="text-xs opacity-90">{t("setup.resumeInfo", { n: resumable.game.dealNumber, opp: opponents, ago: timeAgo(resumable.savedAt, t) })}</span>
+            {/* kleine Infozeile ohne den dicken Comic-Schatten des Knopfs – sonst kaum lesbar */}
+            <span className="font-sans text-xs font-semibold text-white/95 [text-shadow:0_1px_1px_rgba(0,0,0,0.3)]">{t("setup.resumeInfo", { n: resumable.game.dealNumber, opp: opponents, ago: timeAgo(resumable.savedAt, t) })}</span>
           </button>
-          <button onClick={onRestart} title={t("setup.restart")} className="chunky-btn chunky-dark flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-2xl px-3 text-xs">
+          <button onClick={onRestart} title={t("setup.restart")} className="chunky-btn chunky-dark flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-2xl px-3 text-xs [text-shadow:0_1px_0_#1b1630]">
             <RotateCcw className="h-5 w-5" /> {t("setup.restart")}
           </button>
         </motion.div>
@@ -332,7 +333,7 @@ function TitleScreen({
 
 function Panel({ title, sub, step, total, badge, children }: { title: string; sub: string; step: number; total: number; badge?: boolean; children: React.ReactNode }) {
   return (
-    <div className="rounded-[2rem] border border-amber-200/15 bg-[#1c120b]/85 p-5 shadow-2xl backdrop-blur sm:p-8">
+    <div className="rounded-[2rem] border border-white/10 bg-[#171c3f]/85 p-5 shadow-2xl backdrop-blur sm:p-8">
       <div className="mb-4 flex items-center justify-between">
         {/* Fortschritt */}
         <div className="flex gap-1.5" aria-label={`${step + 1} / ${total}`}>

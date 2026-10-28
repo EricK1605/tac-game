@@ -21,7 +21,7 @@ export function Sidebar({ game }: { game: GameState }) {
   }, [tab, chat.length]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-amber-200/15 bg-[#1c120b]/80 shadow-2xl backdrop-blur">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#171c3f]/80 shadow-2xl backdrop-blur">
       <div className="flex border-b border-amber-200/10">
         <TabButton active={tab === "log"} onClick={() => setTab("log")} icon={<History className="h-4 w-4" />}>
           {t("side.log")}
@@ -118,7 +118,7 @@ function ChatPanel({ game }: { game: GameState }) {
           return (
             <motion.div key={m.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
               <div
-                className={`max-w-[85%] rounded-2xl px-3 py-1.5 text-sm shadow ${mine ? "rounded-br-sm bg-amber-200 text-amber-950" : "rounded-bl-sm bg-[#3a2616] text-amber-50"}`}
+                className={`max-w-[85%] rounded-2xl px-3 py-1.5 text-sm shadow ${mine ? "rounded-br-sm bg-amber-200 text-amber-950" : "rounded-bl-sm bg-[#2c3466] text-amber-50"}`}
               >
                 {!mine && (
                   <div className="text-[11px] font-bold" style={{ color: PLAYER_COLORS[m.player].light }}>

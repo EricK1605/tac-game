@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Crown, MessageCircle, Smile, X } from "lucide-react";
+import { Check, Crown, Flag, MessageCircle, Smile, X } from "lucide-react";
 import type { GameState } from "@/types/game";
-import { EMOTES, useGameStore, type FxEvent } from "@/store/gameStore";
-import { PLAYER_COLORS, teamOf } from "@/lib/engine/constants";
+import { EMOTES, useGameStore, type EmoteId, type FxEvent } from "@/store/gameStore";
+import { PLAYER_COLORS, nextPlayer, teamOf } from "@/lib/engine/constants";
 import { haptics } from "@/lib/haptics";
 import { relSeat } from "@/lib/layout";
 import { lookOf, personaById } from "@/lib/personas";
@@ -57,6 +57,9 @@ export function PlayerPlate({ game, player, active }: { game: GameState; player:
   const { t, lang, name } = useGameText(game);
   const me = useGameStore((s) => s.mySeats[0] ?? 0);
   const title = personaById(p.persona)?.[lang].title ?? t("plate.ritter");
+  // Wer diese Runde beginnt und wer laut Meldung rauskommen kann
+  const starter = game.phase !== "gameOver" && nextPlayer(game.dealer) === player;
+  const canOpen = game.phase === "gameOver" ? null : game.announcements[player];
 
   return (
     <div className={`pointer-events-none absolute z-20 max-w-[49%] xl:w-36 xl:max-w-none ${PLATE_POS[relSeat(player)]}`}>
@@ -68,7 +71,7 @@ export function PlayerPlate({ game, player, active }: { game: GameState; player:
         }`}
         style={{
           borderColor: active ? "#fde047" : `${col.hex}88`,
-          background: `linear-gradient(${right ? "250deg" : "110deg"}, ${col.dark}ee, rgba(20,12,6,0.88) 70%)`,
+          background: `linear-gradient(${right ? "250deg" : "110deg"}, ${col.dark}ee, rgba(16,18,42,0.88) 70%)`,
           boxShadow: active ? `0 0 0 3px ${col.hex}55, 0 0 22px ${col.hex}aa, 0 6px 18px rgba(0,0,0,0.45)` : undefined,
         }}
       >
@@ -82,11 +85,27 @@ export function PlayerPlate({ game, player, active }: { game: GameState; player:
             />
           )}
           <div
-            className="relative h-11 w-11 overflow-visible rounded-full border-[3px] bg-gradient-to-b from-[#5b7fd6] to-[#2b3f7a] xl:h-16 xl:w-16"
+            className="pointer-events-auto relative h-11 w-11 overflow-hidden rounded-full border-[3px] bg-gradient-to-b from-[#5b7fd6] to-[#2b3f7a] xl:h-16 xl:w-16"
             style={{ borderColor: active ? "#fde047" : col.hex }}
           >
-            <Character look={lookOf(p.persona)} color={player} mood={mood} size={64} className="!h-full !w-full [&>svg]:h-full [&>svg]:w-full" />
+            {/* Brustbild: Figur größer und unten angeschnitten, damit Gesicht und Hut gut zu sehen sind */}
+            <Character
+              look={lookOf(p.persona)}
+              color={player}
+              mood={mood}
+              size={64}
+              className="!absolute left-1/2 top-[-5%] !h-[130%] !w-[110%] -translate-x-1/2 [&>svg]:h-full [&>svg]:w-full"
+            />
           </div>
+          {starter && (
+            <span
+              title={t("plate.starts")}
+              aria-label={t("plate.starts")}
+              className={`absolute -bottom-1 grid h-5 w-5 place-items-center rounded-full border-2 border-[#1b1630] bg-amber-300 text-[#1b1630] shadow ${right ? "-right-1" : "-left-1"}`}
+            >
+              <Flag className="h-2.5 w-2.5" strokeWidth={3} />
+            </span>
+          )}
           <EmoteBubble player={player} />
         </div>
 
@@ -99,7 +118,16 @@ export function PlayerPlate({ game, player, active }: { game: GameState; player:
           <span className="block max-w-full truncate text-[9px] font-bold uppercase leading-tight tracking-wider" style={{ color: col.light }}>
             {title}
           </span>
-          <div className="mt-0.5 flex h-4 items-center gap-1">
+          <div className={`mt-0.5 flex h-4 items-center gap-1 ${right ? "flex-row-reverse" : ""}`}>
+            {canOpen !== null && (
+              <span
+                title={t(canOpen ? "plate.canOpen" : "plate.cannotOpen")}
+                aria-label={t(canOpen ? "plate.canOpen" : "plate.cannotOpen")}
+                className={`grid h-3.5 w-3.5 shrink-0 place-items-center rounded-full ${canOpen ? "bg-emerald-500 text-white" : "bg-black/50 text-red-300"}`}
+              >
+                {canOpen ? <Check className="h-2.5 w-2.5" strokeWidth={3.5} /> : <X className="h-2.5 w-2.5" strokeWidth={3.5} />}
+              </span>
+            )}
             <AnimatePresence mode="wait" initial={false}>
               {skipped ? (
                 <Status key="skip" className="bg-red-600">{t("plate.skip")}</Status>
@@ -158,13 +186,14 @@ function EmoteBubble({ player }: { player: number }) {
     for (let i = s.emotes.length - 1; i >= 0; i--) if (s.emotes[i].player === player) return s.emotes[i];
     return null;
   });
-  const [shown, setShown] = useState<{ id: number; emoji: string } | null>(null);
+  const [shown, setShown] = useState<{ id: number; emote: EmoteId } | null>(null);
+  const look = useGameStore((s) => lookOf(s.game?.players[player].persona));
   const down = isTopSeat(player);
   const right = isRightSeat(player);
 
   useEffect(() => {
     if (!last || Date.now() - last.time > 2500) return;
-    setShown({ id: last.id, emoji: last.emoji });
+    setShown({ id: last.id, emote: last.emote });
     const t = setTimeout(() => setShown(null), 2200);
     return () => clearTimeout(t);
   }, [last?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -183,8 +212,8 @@ function EmoteBubble({ player }: { player: number }) {
             right ? "xl:left-auto xl:right-[calc(100%+10px)]" : "xl:left-[calc(100%+10px)]"
           }`}
         >
-          <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl border-[3px] border-[#1b1630] bg-white text-3xl shadow-[0_4px_0_rgba(0,0,0,0.4)] sm:h-14 sm:w-14 sm:text-4xl">
-            {shown.emoji}
+          <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border-[3px] border-[#1b1630] bg-white shadow-[0_4px_0_rgba(0,0,0,0.4)] sm:h-16 sm:w-16">
+            <Character look={look} color={player} mood={shown.emote} size={40} className="-mt-1" />
             <span
               className={`absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border-[#1b1630] bg-white xl:hidden ${
                 down ? "-top-[8px] border-l-[3px] border-t-[3px]" : "-bottom-[8px] border-b-[3px] border-r-[3px]"
@@ -353,9 +382,11 @@ export function EmoteButton() {
   const [open, setOpen] = useState(false);
   const [cooldown, setCooldown] = useState(false);
   const emote = useGameStore((s) => s.emote);
+  const me = useGameStore((s) => s.mySeats[0] ?? 0);
+  const look = useGameStore((s) => lookOf(s.game?.players[s.mySeats[0] ?? 0].persona));
   const { t } = useT();
 
-  const send = (e: string) => {
+  const send = (e: EmoteId) => {
     if (cooldown) return;
     emote(e);
     setOpen(false);
@@ -373,7 +404,7 @@ export function EmoteButton() {
             exit={{ opacity: 0, scale: 0.5, y: 20 }}
             transition={{ type: "spring", stiffness: 450, damping: 25 }}
             // w-max: sonst übernimmt das Raster die Breite des kleinen Knopfs und die Emojis liegen übereinander
-            className="absolute bottom-full left-0 mb-2 grid w-max origin-bottom-left grid-cols-5 gap-1.5 rounded-2xl border-[3px] border-[#1b1630] bg-gradient-to-b from-[#5a76c9] to-[#2c3d78] p-2 shadow-[0_5px_0_rgba(0,0,0,0.45)]"
+            className="absolute bottom-full left-0 mb-2 grid w-max origin-bottom-left grid-cols-3 gap-1.5 rounded-2xl border-[3px] border-[#1b1630] bg-gradient-to-b from-[#5a76c9] to-[#2c3d78] p-2 shadow-[0_5px_0_rgba(0,0,0,0.45)]"
           >
             {EMOTES.map((e, i) => (
               <motion.button
@@ -383,10 +414,11 @@ export function EmoteButton() {
                 transition={{ delay: i * 0.02, type: "spring", stiffness: 500, damping: 18 }}
                 whileTap={{ scale: 0.85 }}
                 onClick={() => send(e)}
-                className="flex h-11 w-11 items-center justify-center rounded-xl border-2 border-[#1b1630] bg-white text-2xl shadow-[0_3px_0_rgba(0,0,0,0.35)] active:translate-y-0.5 active:shadow-none"
-                aria-label={`Emote ${e}`}
+                className="flex h-16 w-16 items-center justify-center rounded-xl border-2 border-[#1b1630] bg-white shadow-[0_3px_0_rgba(0,0,0,0.35)] active:translate-y-0.5 active:shadow-none"
+                aria-label={t(`emote.${e}`)}
+                title={t(`emote.${e}`)}
               >
-                {e}
+                <Character look={look} color={me} mood={e} size={40} className="-mt-1" />
               </motion.button>
             ))}
           </motion.div>
@@ -464,7 +496,7 @@ export function SidebarDrawer({ game }: { game: GameState }) {
               onDragEnd={(_, info) => {
                 if (info.offset.y > 120 || info.velocity.y > 600) setOpen(false);
               }}
-              className="fixed inset-x-0 bottom-0 z-50 flex h-[72dvh] flex-col rounded-t-3xl border-t-[3px] border-[#1b1630] bg-[#1c120b] p-2 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-2xl"
+              className="fixed inset-x-0 bottom-0 z-50 flex h-[72dvh] flex-col rounded-t-3xl border-t-[3px] border-[#1b1630] bg-[#171c3f] p-2 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-2xl"
             >
               <div className="mx-auto my-2 h-1.5 w-12 shrink-0 rounded-full bg-amber-100/30" />
               {/* Auf dem Handy ist im Kopf kein Platz – hier lässt sich die Sprache wechseln */}

@@ -111,8 +111,8 @@ export function RoomClient({ code }: { code: string }) {
           store().hostAction(a);
         }),
         ch.on("emote", (p) => {
-          const e = p as { player: number; emoji: string };
-          store().remoteEmote(e.player, e.emoji);
+          const e = p as { player: number; emote: unknown };
+          store().remoteEmote(e.player, e.emote);
         }),
         ch.on("ready", () => ch.send("room", state)),
       );
@@ -159,8 +159,8 @@ export function RoomClient({ code }: { code: string }) {
           setStatus("playing");
         }),
         ch.on("emote", (p) => {
-          const e = p as { player: number; emoji: string };
-          store().remoteEmote(e.player, e.emoji);
+          const e = p as { player: number; emote: unknown };
+          store().remoteEmote(e.player, e.emote);
         }),
         ch.on("closed", () => {
           setStatus("closed");
@@ -195,7 +195,7 @@ export function RoomClient({ code }: { code: string }) {
 
   return (
     <div className="flex min-h-dvh items-start justify-center p-3 sm:items-center sm:p-6">
-      <div className="w-full max-w-2xl rounded-[2rem] border border-amber-200/15 bg-[#1c120b]/85 p-5 shadow-2xl backdrop-blur sm:p-8">
+      <div className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-[#171c3f]/85 p-5 shadow-2xl backdrop-blur sm:p-8">
         <div className="mb-4 flex items-center justify-between gap-2">
           <button onClick={leaveRoom} className="chunky-btn chunky-dark flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm" aria-label={t("back")}>
             <ArrowLeft className="h-4 w-4" />
@@ -438,7 +438,7 @@ function SeatCard({
   const persona = s.kind === "bot" ? personaById(s.persona) : null;
   const label = s.kind === "human" ? s.name : persona ? persona[lang].name : t("lobby.open");
   return (
-    <motion.div layout className="flex items-center gap-2 rounded-xl p-2 ring-1" style={{ background: `linear-gradient(110deg, ${col.dark}cc, rgba(20,12,6,0.6))`, borderColor: col.hex, boxShadow: mine ? `0 0 0 2px #fde047` : undefined }}>
+    <motion.div layout className="flex items-center gap-2 rounded-xl p-2 ring-1" style={{ background: `linear-gradient(110deg, ${col.dark}cc, rgba(16,18,42,0.6))`, borderColor: col.hex, boxShadow: mine ? `0 0 0 2px #fde047` : undefined }}>
       <div className="relative shrink-0">
         <AnimatePresence mode="popLayout">
           {s.kind === "open" ? (

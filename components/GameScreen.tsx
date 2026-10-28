@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useAnimationControls } from "framer-motion";
-import { BookOpen, Eye, Home, RotateCcw, Trophy, Volume2, VolumeX } from "lucide-react";
+import { BookOpen, Eye, Home, PanelRightClose, PanelRightOpen, RotateCcw, Trophy, Volume2, VolumeX } from "lucide-react";
 import type { GameState } from "@/types/game";
 import { useGameStore } from "@/store/gameStore";
 import { PLAYER_COLORS, isHome, teamOf } from "@/lib/engine/constants";
@@ -36,6 +36,20 @@ export function GameScreen({ onLeave }: { onLeave?: () => void }) {
   const controls = useTurnControls();
   const router = useRouter();
   const { t } = useGameText(game);
+  // Spielverlauf und Chat lassen sich am großen Bildschirm einklappen – die Wahl bleibt gespeichert
+  const [sideOpen, setSideOpen] = useState(true);
+  useEffect(() => {
+    try {
+      setSideOpen(localStorage.getItem("tac:side") !== "0");
+    } catch {}
+  }, []);
+  const toggleSide = () =>
+    setSideOpen((o) => {
+      try {
+        localStorage.setItem("tac:side", o ? "0" : "1");
+      } catch {}
+      return !o;
+    });
   // Zurück ins Menü – der Spielstand bleibt gespeichert
   const toMenu =
     onLeave ??
@@ -88,6 +102,9 @@ export function GameScreen({ onLeave }: { onLeave?: () => void }) {
           <IconButton onClick={toggleSound} label={sound ? t("hdr.soundOff") : t("hdr.soundOn")}>
             {sound ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
           </IconButton>
+          <IconButton onClick={toggleSide} label={t(sideOpen ? "hdr.sideHide" : "hdr.sideShow")} className="hidden lg:flex">
+            {sideOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+          </IconButton>
           <IconButton onClick={toMenu} label={t("hdr.menu")}>
             <Home className="h-4 w-4" />
           </IconButton>
@@ -100,8 +117,8 @@ export function GameScreen({ onLeave }: { onLeave?: () => void }) {
       */}
       <div className="mx-auto flex w-full max-w-[1500px] flex-1 flex-col gap-4 px-2 pb-20 sm:px-4 lg:pb-3 min-[1700px]:max-w-[1900px] min-[1700px]:flex-row min-[1700px]:items-start">
         <AdSlot slot="spiel-links" className="order-2 min-[1700px]:order-none" />
-        <main className="grid w-full min-w-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[1fr_340px]">
-          <div className="flex min-w-0 flex-col items-center gap-2">
+        <main className="flex w-full min-w-0 flex-1 flex-col gap-4 lg:flex-row lg:items-start lg:gap-0">
+          <div className="flex min-w-0 flex-1 flex-col items-center gap-2">
             {/*
               Brettgröße = Bildschirmhöhe minus Kopfzeile, Handbereich und – bis xl – die Spielerkarten über und unter dem Brett.
               Ab xl sitzen die Spielerkarten links und rechts, dafür wird Breite freigehalten.
@@ -134,9 +151,23 @@ export function GameScreen({ onLeave }: { onLeave?: () => void }) {
             <HandArea game={game} controls={controls} />
           </div>
 
-          <aside className="hidden lg:sticky lg:top-2 lg:block lg:h-[calc(100dvh-80px)]">
-            <Sidebar game={game} />
-          </aside>
+          {/* Gleitet beim Ein- und Ausklappen zur Seite, das Brett bekommt den Platz */}
+          <motion.aside
+            initial={false}
+            animate={{ width: sideOpen ? 356 : 0, opacity: sideOpen ? 1 : 0 }}
+            transition={{ type: "spring", stiffness: 260, damping: 32 }}
+            className="hidden shrink-0 overflow-hidden lg:sticky lg:top-2 lg:block lg:h-[calc(100dvh-80px)]"
+            aria-hidden={!sideOpen}
+          >
+            <motion.div
+              initial={false}
+              animate={{ x: sideOpen ? 0 : 60 }}
+              transition={{ type: "spring", stiffness: 260, damping: 32 }}
+              className="h-full w-[356px] pl-4"
+            >
+              <Sidebar game={game} />
+            </motion.div>
+          </motion.aside>
         </main>
         <AdSlot slot="spiel-rechts" className="order-3" />
       </div>
@@ -163,7 +194,7 @@ export function OracleBadge() {
   );
 }
 
-function IconButton({ children, onClick, label }: { children: React.ReactNode; onClick: () => void; label: string }) {
+function IconButton({ children, onClick, label, className = "" }: { children: React.ReactNode; onClick: () => void; label: string; className?: string }) {
   return (
     <button
       onClick={() => {
@@ -172,7 +203,7 @@ function IconButton({ children, onClick, label }: { children: React.ReactNode; o
       }}
       title={label}
       aria-label={label}
-      className="chunky-btn chunky-dark flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-sm sm:px-3"
+      className={`chunky-btn chunky-dark flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-sm sm:px-3 ${className}`}
     >
       {children}
     </button>
@@ -317,7 +348,7 @@ function GameOverModal({ game, me, onLeave }: { game: GameState; me: number; onL
         initial={{ scale: 0.8, y: 30 }}
         animate={{ scale: 1, y: 0 }}
         transition={{ type: "spring", stiffness: 200, damping: 18, delay: 0.6 }}
-        className="w-full max-w-md rounded-3xl border border-amber-200/30 bg-gradient-to-b from-[#3b2414] to-[#1c120b] p-8 text-center shadow-2xl"
+        className="w-full max-w-md rounded-3xl border border-amber-200/30 bg-gradient-to-b from-[#2a3170] to-[#171c3f] p-8 text-center shadow-2xl"
       >
         <div className="mb-4 flex items-end justify-center gap-2">
           <MoodLoop game={game} player={game.winner ?? 0} />
