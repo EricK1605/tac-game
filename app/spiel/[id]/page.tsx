@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { useGameStore } from "@/store/gameStore";
 import { GameScreen } from "@/components/GameScreen";
+import { useT } from "@/lib/useI18n";
 
 /** Spielseite mit Sitzungs-Token: lädt beim Neuladen den gespeicherten Spielstand. */
 export default function SpielPage({ params }: { params: Promise<{ id: string }> }) {
@@ -13,6 +14,7 @@ export default function SpielPage({ params }: { params: Promise<{ id: string }> 
   const hasGame = useGameStore((s) => s.game !== null);
   const resume = useGameStore((s) => s.resume);
   const [missing, setMissing] = useState(false);
+  const { t } = useT();
 
   useEffect(() => {
     if (useGameStore.getState().gameId === id) return;
@@ -28,13 +30,13 @@ export default function SpielPage({ params }: { params: Promise<{ id: string }> 
       </span>
       {missing ? (
         <>
-          <p className="max-w-xs text-amber-100/80">Dieses Spiel gibt es auf diesem Gerät nicht (mehr). Spielstände werden nur im eigenen Browser gespeichert.</p>
+          <p className="max-w-xs text-amber-100/80">{t("game.missing")}</p>
           <Link href="/" className="chunky-btn chunky-green rounded-2xl px-6 py-3 text-lg">
-            Zum Hauptmenü
+            {t("game.toMenu")}
           </Link>
         </>
       ) : (
-        <motion.div className="flex gap-1.5" aria-label="Spiel wird geladen">
+        <motion.div className="flex gap-1.5" aria-label="…">
           {[0, 1, 2].map((i) => (
             <motion.span
               key={i}

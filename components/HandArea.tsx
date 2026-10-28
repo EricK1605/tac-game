@@ -1,13 +1,14 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowRightLeft, Ban, Flame, Hourglass, RotateCcw, SkipForward, Trash2, Undo2, Users } from "lucide-react";
+import { ArrowRightLeft, Ban, Eye, Flame, Hourglass, RotateCcw, SkipForward, Trash2, Undo2, Users } from "lucide-react";
 import type { Card, GameState, Move } from "@/types/game";
-import { useGameStore } from "@/store/gameStore";
-import { CARD_HINT, PLAYER_COLORS, cardLabel, partnerOf } from "@/lib/engine/constants";
-import { decider } from "@/lib/engine/moves";
+import { swapSeat, useGameStore } from "@/store/gameStore";
+import { PLAYER_COLORS, partnerOf } from "@/lib/engine/constants";
+import { decider, hiddenCards } from "@/lib/engine/moves";
 import { haptics } from "@/lib/haptics";
-import { CardFace } from "./CardView";
+import { useGameText } from "@/lib/useI18n";
+import { CardBack, CardFace } from "./CardView";
 import type { useTurnControls } from "./useTurnControls";
 
 type Controls = ReturnType<typeof useTurnControls>;
@@ -19,12 +20,18 @@ export function HandArea({ game, controls }: { game: GameState; controls: Contro
   const seven = useGameStore((s) => s.seven);
   const resetSeven = useGameStore((s) => s.resetSeven);
   const playMove = useGameStore((s) => s.playMove);
+  const mySeats = useGameStore((s) => s.mySeats);
+  const { t, name, card } = useGameText(game);
+  const me = mySeats[0] ?? 0;
 
   const swapPhase = game.phase === "swap";
-  const waitingForSwap = swapPhase && game.swapSelections[0] !== null;
-  const owner = controls.humanTurn ? controls.handOwner : 0;
+  // Beim Tauschen: der Platz, der noch wählen muss (Orakel: erst du, dann das Orakel)
+  const swapFor = swapPhase ? swapSeat(game, mySeats) : null;
+  const waitingForSwap = swapPhase && swapFor === null;
+  const owner = swapFor ?? (controls.humanTurn ? controls.handOwner : me);
   const hand: Card[] = game.players[owner].hand;
-  const foreignHand = owner !== 0;
+  const foreignHand = owner !== me;
+  const hidden = hiddenCards(game);
 
   const isPlayable = (c: Card) => {
     if (swapPhase) return !waitingForSwap;
@@ -36,20 +43,20 @@ export function HandArea({ game, controls }: { game: GameState; controls: Contro
     <div className="flex flex-col items-center gap-2">
       {/* Anweisung und Aktions-Knöpfe teilen sich eine Zeile, damit das Brett mehr Höhe bekommt */}
       <div className="flex min-h-[2.5rem] flex-wrap items-center justify-center gap-2">
-        <InstructionBar game={game} controls={controls} />
-        {swapPhase && selectedCardId && !waitingForSwap && (
+        <InstructionBar game={game} controls={controls} swapFor={swapFor} />
+        {swapPhase && selectedCardId && swapFor !== null && (
           <ActionButton onClick={() => chooseSwap(selectedCardId)} icon={<ArrowRightLeft className="h-4 w-4" />} primary>
-            Karte an {game.players[partnerOf(0)].name} geben
+            {swapFor === me ? t("hand.swapGive", { name: name(partnerOf(me)) }) : t("hand.swapTake")}
           </ActionButton>
         )}
         {seven && (
           <>
             <span className="font-display text-stroke rounded-xl border-[3px] border-[#1b1630] bg-gradient-to-b from-red-500 to-red-800 px-3 py-1.5 text-sm text-white">
-              7er: noch {seven.remaining} {seven.remaining === 1 ? "Schritt" : "Schritte"}
+              {t("hand.seven", { n: seven.remaining, steps: t(seven.remaining === 1 ? "hand.step" : "hand.steps") })}
             </span>
             {seven.segments.length > 0 && (
               <ActionButton onClick={resetSeven} icon={<RotateCcw className="h-4 w-4" />}>
-                Zurücksetzen
+                {t("hand.reset")}
               </ActionButton>
             )}
           </>
@@ -60,8 +67,8 @@ export function HandArea({ game, controls }: { game: GameState; controls: Contro
       </div>
 
       {foreignHand && (
-        <div className="font-display text-stroke text-sm uppercase tracking-wider text-red-300">
-          <Flame className="mr-1 inline h-3.5 w-3.5" /> Karten von {game.players[owner].name}
+        <div className="font-display text-stroke flex items-center gap-1 text-sm uppercase tracking-wider" style={{ color: PLAYER_COLORS[owner].light }}>
+          {game.players[owner].persona === "orakel" ? <Eye className="h-3.5 w-3.5" /> : <Flame className="h-3.5 w-3.5" />} {t("hand.cardsOf", { name: name(owner) })}
         </div>
       )}
 
@@ -91,48 +98,57 @@ export function HandArea({ game, controls }: { game: GameState; controls: Contro
                 aria-disabled={!playable}
                 className={`relative -mx-1.5 origin-bottom sm:-mx-1 ${playable ? "cursor-pointer" : "cursor-not-allowed"}`}
                 style={{ zIndex: selected ? 50 : i }}
-                aria-label={`Karte ${cardLabel(c.value)}`}
+                aria-label={hidden.has(c.id) ? t("hand.hidden") : t("hand.card", { card: card(c.value) })}
               >
-                <CardFace value={c.value} size="hand" dimmed={!playable && (controls.humanTurn || swapPhase)} selected={selected} />
+                {hidden.has(c.id) ? (
+                  <CardBack className={`h-20 w-14 rounded-lg sm:h-[5.6rem] sm:w-16 sm:rounded-xl ${selected ? "ring-4 ring-amber-300 ring-offset-2 ring-offset-transparent" : ""}`} />
+                ) : (
+                  <CardFace value={c.value} size="hand" dimmed={!playable && (controls.humanTurn || swapPhase)} selected={selected} />
+                )}
               </motion.button>
             );
           })}
         </AnimatePresence>
-        {hand.length === 0 && <div className="pb-10 text-sm italic text-amber-100/50">Keine Karten auf der Hand</div>}
+        {hand.length === 0 && <div className="pb-10 text-sm italic text-amber-100/50">{t("hand.empty")}</div>}
       </div>
     </div>
   );
 }
 
-function InstructionBar({ game, controls }: { game: GameState; controls: Controls }) {
+function InstructionBar({ game, controls, swapFor }: { game: GameState; controls: Controls; swapFor: number | null }) {
   const selectedCardId = useGameStore((s) => s.selectedCardId);
   const thinking = useGameStore((s) => s.thinking);
+  const me = useGameStore((s) => s.mySeats[0] ?? 0);
+  const { t, name, card } = useGameText(game);
   let text: string;
   let tone = "bg-black/50 text-amber-50 border-black/60";
-  const owner = controls.humanTurn ? controls.handOwner : 0;
-  const card = game.players[owner].hand.find((c) => c.id === selectedCardId);
+  const owner = controls.humanTurn ? controls.handOwner : me;
+  const selected = game.players[owner].hand.find((c) => c.id === selectedCardId);
+  const d = game.phase === "play" ? decider(game) : me;
+  const forOracle = controls.humanTurn && d !== me;
 
   if (game.phase === "swap") {
-    text = game.swapSelections[0]
-      ? "Warte auf die anderen Spieler…"
-      : `Tauschen: Wähle eine Karte für deinen Partner ${game.players[partnerOf(0)].name}`;
+    text = swapFor === null ? t("ins.waitSwap") : swapFor === me ? t("ins.swap", { name: name(partnerOf(me)) }) : t("ins.swapOracle");
     tone = "bg-gradient-to-b from-emerald-500 to-emerald-800 text-white border-[#1b1630]";
   } else if (game.phase === "gameOver") {
-    text = "Spiel beendet";
+    text = t("ins.over");
   } else if (!controls.humanTurn) {
-    const d = decider(game);
-    text = `${game.players[d].name} ist am Zug${thinking ? " …" : ""}`;
+    text = t("ins.turnOf", { name: name(d) }) + (thinking ? " …" : "");
   } else {
-    tone = "bg-gradient-to-b from-amber-400 to-orange-600 text-white border-[#1b1630]";
-    if (game.pendingWin !== null) text = "Das gegnerische Team ist fertig – nur dein TAC kann den Sieg noch verhindern!";
-    else if (game.subTurn?.type === "devil") text = `Teufel: Spiele eine Karte von ${game.players[game.subTurn.target].name} für ${game.players[game.subTurn.target].name}`;
-    else if (game.subTurn?.type === "jester") text = "Narr: Spiele sofort eine deiner neuen Karten";
-    else if (game.skipPending) text = "Du musst aussetzen (8): Lege eine Karte ab – oder kontere mit TAC";
-    else if (controls.mustDiscard) text = "Kein Zug möglich – wähle eine Karte und lege sie ab";
-    else if (!card) text = "Du bist dran – wähle eine Karte";
-    else if (controls.segmentsLeft) text = "Wähle eine Kugel und ein Ziel – die 7 kann beliebig aufgeteilt werden";
-    else if (controls.selectable.size) text = `${cardLabel(card.value)}: ${CARD_HINT[String(card.value)]} – tippe eine leuchtende Kugel an, dann das Ziel (knapp daneben reicht)`;
-    else text = `${cardLabel(card.value)}: ${CARD_HINT[String(card.value)]}`;
+    tone = forOracle
+      ? "bg-gradient-to-b from-purple-500 to-fuchsia-700 text-white border-[#1b1630]"
+      : "bg-gradient-to-b from-amber-400 to-orange-600 text-white border-[#1b1630]";
+    const hint = selected ? t(`hint.${String(selected.value)}` as Parameters<typeof t>[0]) : "";
+    if (game.pendingWin !== null) text = t("ins.lastTac");
+    else if (game.subTurn?.type === "devil") text = t("ins.devil", { name: name(game.subTurn.target) });
+    else if (game.subTurn?.type === "jester") text = t("ins.jester");
+    else if (game.skipPending) text = t("ins.skip");
+    else if (controls.mustDiscard) text = t("ins.mustDiscard");
+    else if (!selected) text = t(forOracle ? "ins.pickOracle" : "ins.pick");
+    else if (!controls.moves.some((m) => m.cardId === selected.id)) text = t("ins.blindVoid", { card: card(selected.value) });
+    else if (controls.segmentsLeft) text = t("ins.seven");
+    else if (controls.selectable.size) text = t("ins.tapMarble", { card: card(selected.value), hint });
+    else text = t("ins.cardHint", { card: card(selected.value), hint });
   }
 
   return (
@@ -150,43 +166,44 @@ function InstructionBar({ game, controls }: { game: GameState; controls: Control
 }
 
 function MoveButton({ move, game, onClick }: { move: Move; game: GameState; onClick: () => void }) {
-  const next = game.players[(game.current + 1) % 4];
+  const { t, name, p } = useGameText(game);
+  const next = name((game.current + 1) % 4);
   switch (move.kind) {
     case "skip":
       return (
         <ActionButton onClick={onClick} icon={<SkipForward className="h-4 w-4" />} primary>
-          {move.tacUndo ? "TAC: " : ""}
-          {next.name} aussetzen lassen
+          {move.tacUndo ? t("btn.tacPrefix") : ""}
+          {t("btn.skip", { name: next })}
         </ActionButton>
       );
     case "discard":
       return (
         <ActionButton onClick={onClick} icon={<Trash2 className="h-4 w-4" />} danger>
-          Karte ablegen
+          {t("btn.discard")}
         </ActionButton>
       );
     case "devil":
       return (
         <ActionButton onClick={onClick} icon={<Flame className="h-4 w-4" />} primary>
-          Teufel gegen {next.name} spielen
+          {t("btn.devil", { name: next })}
         </ActionButton>
       );
     case "jester":
       return (
         <ActionButton onClick={onClick} icon={<Users className="h-4 w-4" />} primary>
-          Narr: Karten weitergeben
+          {t("btn.jester")}
         </ActionButton>
       );
     case "void":
       return (
         <ActionButton onClick={onClick} icon={<Ban className="h-4 w-4" />}>
-          Karte ohne Wirkung spielen
+          {t("btn.void")}
         </ActionButton>
       );
     default:
       return (
         <ActionButton onClick={onClick} icon={<Undo2 className="h-4 w-4" />} primary>
-          {move.label}
+          {p(move.label)}
         </ActionButton>
       );
   }

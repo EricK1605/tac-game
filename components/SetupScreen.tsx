@@ -3,38 +3,55 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, BookOpen, ChevronDown, Brain, Crown, Dices, Gauge, Play, RotateCcw, Sparkles, Swords } from "lucide-react";
-import type { Difficulty } from "@/types/game";
+import { ArrowLeft, ArrowRight, BookOpen, Brain, ChevronDown, Crown, Dices, Eye, Gamepad2, Gauge, LogIn, Play, Plus, RotateCcw, Sparkles, Swords, Users } from "lucide-react";
+import type { Difficulty, GameMode } from "@/types/game";
 import { useGameStore } from "@/store/gameStore";
-import { PLAYER_COLORS } from "@/lib/engine/constants";
 import { haptics } from "@/lib/haptics";
-import { DEFAULT_BOTS, PERSONAS, lookOf, personaById } from "@/lib/personas";
-import { lastOpenSave, readSettings, type SaveFile } from "@/lib/saves";
+import { DEFAULT_BOTS, ORACLE, ORACLE_OPPONENTS, PERSONAS, lookOf, personaById } from "@/lib/personas";
+import { lastOpenSave, readSettings, rememberSettings, type SaveFile } from "@/lib/saves";
+import { newRoomCode, normalizeRoomCode } from "@/lib/net/room";
+import { markHost } from "@/lib/net/protocol";
+import { playerName, useT } from "@/lib/useI18n";
+import type { Key } from "@/lib/i18n";
 import { CardFace } from "./CardView";
 import { Character } from "./Character";
 import { OpponentPicker, PartnerPicker } from "./CharacterPicker";
+import { LangSwitch } from "./LangSwitch";
+import { OracleBadge } from "./GameScreen";
 
-const LEVELS: { id: Difficulty; title: string; text: string; icon: React.ReactNode }[] = [
-  { id: "easy", title: "Leicht", text: "Ideal zum Lernen – die Bots spielen fast zufällig.", icon: <Sparkles className="h-5 w-5" /> },
-  { id: "medium", title: "Mittel", text: "Schmeißen, eröffnen, ins Haus ziehen – solide Gegner.", icon: <Swords className="h-5 w-5" /> },
-  { id: "hard", title: "Schwer", text: "Meidet Gefahren, schützt den Partner, plant voraus.", icon: <Brain className="h-5 w-5" /> },
+const LEVELS: { id: Difficulty; icon: React.ReactNode }[] = [
+  { id: "easy", icon: <Sparkles className="h-5 w-5" /> },
+  { id: "medium", icon: <Swords className="h-5 w-5" /> },
+  { id: "hard", icon: <Brain className="h-5 w-5" /> },
 ];
 
-/** Schritte des Assistenten nach dem Titelbildschirm. */
-const STEPS = [
-  { title: "Wie heißt du?", sub: "So nennen dich deine Mitspieler im Chat." },
-  { title: "Wähle deinen Partner", sub: "Ihr spielt gemeinsam – Rot und Grün." },
-  { title: "Wähle deine Gegner", sub: "Sie spielen Blau und Gelb." },
-  { title: "Wie wollt ihr spielen?", sub: "Fast geschafft!" },
-];
+type Step = "name" | "partner" | "opp" | "opts" | "oracle" | "friends";
+
+/** Ablauf des Assistenten je Modus. */
+const FLOWS: Record<GameMode, Step[]> = {
+  classic: ["name", "partner", "opp", "opts"],
+  oracle: ["name", "oracle"],
+  friends: ["name", "friends"],
+};
+
+const STEP_TEXT: Record<Step, [Key, Key]> = {
+  name: ["step.name.title", "step.name.sub"],
+  partner: ["step.partner.title", "step.partner.sub"],
+  opp: ["step.opp.title", "step.opp.sub"],
+  opts: ["step.opts.title", "step.opts.sub"],
+  oracle: ["step.oracle.title", "step.oracle.sub"],
+  friends: ["mode.friends.title", "mode.friends.desc"],
+};
 
 export function SetupScreen() {
   const router = useRouter();
   const start = useGameStore((s) => s.start);
   const setShowRules = useGameStore((s) => s.setShowRules);
   const defaults = useGameStore((s) => s.settings);
+  const { t } = useT();
 
-  // Schritt 0 = Titelbildschirm, 1–4 = Assistent
+  // flow = null: Titelbildschirm mit Modus-Auswahl
+  const [flow, setFlow] = useState<GameMode | null>(null);
   const [step, setStep] = useState(0);
   const [dir, setDir] = useState(1);
   const [name, setName] = useState("");
@@ -46,6 +63,12 @@ export function SetupScreen() {
 
   // Gespeicherte Einstellungen und offene Partie erst im Browser lesen (sonst Hydration-Unterschied)
   useEffect(() => {
+    // Alte Einladungs-Links der Form /?room=tac-1234 in den Raum weiterleiten
+    const room = new URLSearchParams(window.location.search).get("room");
+    if (room) {
+      router.replace(`/raum/${normalizeRoomCode(room)}`);
+      return;
+    }
     const s = readSettings();
     if (s) {
       setName(s.playerName === "Du" ? "" : s.playerName);
@@ -55,17 +78,41 @@ export function SetupScreen() {
       if (s.bots?.length === 3 && s.bots.every((b) => personaById(b))) setBots(s.bots);
     }
     setResumable(lastOpenSave());
-  }, []);
+  }, [router]);
+
+  const steps = flow ? FLOWS[flow] : [];
+  const current = steps[step];
 
   const go = (to: number) => {
     haptics.tap();
     setDir(to > step ? 1 : -1);
+    if (to < 0) {
+      setFlow(null);
+      setStep(0);
+      return;
+    }
     setStep(to);
   };
+  const choose = (mode: GameMode) => {
+    haptics.tap();
+    setDir(1);
+    setFlow(mode);
+    setStep(0);
+    if (mode === "oracle" && difficulty !== "hard") setDifficulty("hard");
+  };
+  const playerNameValue = name.trim() || "Du";
   const launch = () => {
     haptics.drop();
-    const id = start({ playerName: name.trim() || "Du", difficulty, master, speed, bots });
+    const mode = flow ?? "classic";
+    const id = start({ playerName: playerNameValue, difficulty, master, speed, bots, mode });
     router.push(`/spiel/${id}`);
+  };
+  const toRoom = (code: string, create: boolean) => {
+    haptics.drop();
+    rememberSettings({ playerName: playerNameValue, difficulty, master, speed });
+    // Wer den Raum erstellt, ist der Gastgeber
+    if (create) markHost(code, null);
+    router.push(`/raum/${code}`);
   };
   const shuffleBots = () => {
     haptics.tap();
@@ -77,27 +124,32 @@ export function SetupScreen() {
       <div className="w-full max-w-xl">
         <AnimatePresence mode="wait" custom={dir} initial={false}>
           <motion.div
-            key={step}
+            key={flow ? `${flow}-${step}` : "title"}
             custom={dir}
             initial={{ opacity: 0, x: dir * 40 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: dir * -40 }}
             transition={{ duration: 0.22, ease: "easeOut" }}
           >
-            {step === 0 ? (
+            {!flow || !current ? (
               <TitleScreen
                 resumable={resumable}
-                onNew={() => go(1)}
+                onMode={choose}
                 onResume={() => resumable && router.push(`/spiel/${resumable.id}`)}
+                onRestart={() => {
+                  if (!resumable) return;
+                  haptics.drop();
+                  router.push(`/spiel/${start(resumable.settings)}`);
+                }}
                 onRules={() => setShowRules(true)}
               />
             ) : (
-              <Panel step={step}>
-                {step === 1 && (
+              <Panel title={t(STEP_TEXT[current][0])} sub={t(STEP_TEXT[current][1])} step={step} total={steps.length} badge={flow === "oracle"}>
+                {current === "name" && (
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
-                      go(2);
+                      go(step + 1);
                     }}
                     className="flex flex-col items-center gap-4"
                   >
@@ -107,46 +159,43 @@ export function SetupScreen() {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       maxLength={14}
-                      placeholder="Du"
+                      placeholder={t("you")}
                       enterKeyHint="next"
                       className="font-display w-full max-w-xs rounded-2xl bg-black/30 px-4 py-3 text-center text-2xl text-amber-50 ring-2 ring-amber-200/20 placeholder:text-amber-100/25 focus:outline-none focus:ring-amber-300/70"
                     />
                   </form>
                 )}
-                {step === 2 && <PartnerPicker bots={bots} onChange={setBots} />}
-                {step === 3 && (
+                {current === "partner" && <PartnerPicker bots={bots} onChange={setBots} />}
+                {current === "opp" && (
                   <>
                     <OpponentPicker bots={bots} onChange={setBots} />
                     <button onClick={shuffleBots} className="mx-auto mt-2 flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-amber-200 hover:bg-white/5">
-                      <Dices className="h-4 w-4" /> Alle zufällig wählen
+                      <Dices className="h-4 w-4" /> {t("shuffle")}
                     </button>
                   </>
                 )}
-                {step === 4 && (
-                  <Options
-                    difficulty={difficulty}
-                    setDifficulty={setDifficulty}
-                    master={master}
-                    setMaster={setMaster}
-                    speed={speed}
-                    setSpeed={setSpeed}
-                    bots={bots}
-                    name={name.trim() || "Du"}
-                  />
+                {current === "opts" && (
+                  <Options {...{ difficulty, setDifficulty, master, setMaster, speed, setSpeed }} lineup={[playerNameValue, ...bots]} />
                 )}
+                {current === "oracle" && <OracleBriefing difficulty={difficulty} setDifficulty={setDifficulty} name={playerNameValue} />}
+                {current === "friends" && <FriendsEntry onRoom={toRoom} />}
 
                 {/* Navigation – auf dem Handy unten angeheftet */}
                 <div className="sticky bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-10 -mx-2 mt-5 flex gap-2 rounded-2xl bg-[#1c120b]/90 p-2 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
-                  <button onClick={() => go(step - 1)} className="chunky-btn chunky-dark flex items-center gap-1.5 rounded-2xl px-4 py-3" aria-label="Zurück">
+                  <button onClick={() => go(step - 1)} className="chunky-btn chunky-dark flex items-center gap-1.5 rounded-2xl px-4 py-3" aria-label={t("back")}>
                     <ArrowLeft className="h-5 w-5" />
                   </button>
-                  {step < 4 ? (
+                  {current === "friends" ? null : step < steps.length - 1 ? (
                     <button onClick={() => go(step + 1)} className="chunky-btn chunky-gold flex flex-1 items-center justify-center gap-2 rounded-2xl py-3 text-lg">
-                      Weiter <ArrowRight className="h-5 w-5" />
+                      {t("next")} <ArrowRight className="h-5 w-5" />
                     </button>
                   ) : (
-                    <motion.button whileTap={{ scale: 0.97 }} onClick={launch} className="chunky-btn chunky-green flex flex-1 items-center justify-center gap-2 rounded-2xl py-3 text-xl">
-                      <Play className="h-5 w-5" /> Los geht&apos;s!
+                    <motion.button
+                      whileTap={{ scale: 0.97 }}
+                      onClick={launch}
+                      className={`chunky-btn ${flow === "oracle" ? "bg-gradient-to-b from-fuchsia-400 via-purple-600 to-purple-800" : "chunky-green"} flex flex-1 items-center justify-center gap-2 rounded-2xl py-3 text-xl`}
+                    >
+                      <Play className="h-5 w-5" /> {t("go")}
                     </motion.button>
                   )}
                 </div>
@@ -159,11 +208,31 @@ export function SetupScreen() {
   );
 }
 
-function TitleScreen({ resumable, onNew, onResume, onRules }: { resumable: SaveFile | null; onNew: () => void; onResume: () => void; onRules: () => void }) {
-  const opponents = resumable ? [1, 3].map((p) => resumable.game.players[p].name).join(" & ") : "";
+const MODES: { id: GameMode; icon: React.ReactNode; tone: string }[] = [
+  { id: "classic", icon: <Gamepad2 className="h-7 w-7" />, tone: "from-amber-400/25 to-orange-600/10 ring-amber-300/40" },
+  { id: "friends", icon: <Users className="h-7 w-7" />, tone: "from-sky-400/25 to-blue-700/10 ring-sky-300/40" },
+  { id: "oracle", icon: <Eye className="h-7 w-7" />, tone: "from-fuchsia-500/30 to-purple-800/10 ring-fuchsia-300/50" },
+];
+
+function TitleScreen({
+  resumable,
+  onMode,
+  onResume,
+  onRestart,
+  onRules,
+}: {
+  resumable: SaveFile | null;
+  onMode: (m: GameMode) => void;
+  onResume: () => void;
+  onRestart: () => void;
+  onRules: () => void;
+}) {
+  const { t, lang } = useT();
+  const opponents = resumable ? [1, 3].map((p) => playerName(resumable.game.players[p], lang)).join(" & ") : "";
   return (
-    <div className="flex flex-col items-center gap-6 py-6 text-center">
-      <div className="flex items-end gap-2">
+    <div className="flex flex-col items-center gap-5 py-4 text-center [@media(max-height:860px)]:gap-3 [@media(max-height:860px)]:py-1">
+      <LangSwitch className="self-end" />
+      <div className="flex items-end gap-2 [@media(max-height:780px)]:hidden">
         {(["tac", 7, 4, "trickser"] as const).map((v, i) => (
           <motion.div key={i} initial={{ y: 40, rotate: 0, opacity: 0 }} animate={{ y: 0, rotate: (i - 1.5) * 9, opacity: 1 }} transition={{ delay: 0.08 * i, type: "spring" }}>
             <CardFace value={v} size="sm" />
@@ -177,67 +246,126 @@ function TitleScreen({ resumable, onNew, onResume, onRules }: { resumable: SaveF
         initial={{ scale: 0.6, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 300, damping: 14, delay: 0.2 }}
-        className="font-display text-stroke-lg text-8xl text-amber-200 drop-shadow-[0_6px_0_rgba(0,0,0,0.35)]"
+        className="font-display text-stroke-lg text-8xl text-amber-200 drop-shadow-[0_6px_0_rgba(0,0,0,0.35)] [@media(max-height:860px)]:text-7xl [@media(max-height:780px)]:text-6xl"
       >
         T<span className="text-red-500">A</span>C
       </motion.div>
-      <p className="max-w-sm text-amber-100/70">Das taktische Karten- und Brettspiel für zwei Teams. Bring mit deinem Partner alle acht Kugeln nach Hause!</p>
-      <div className="flex -space-x-2">
+      <p className="max-w-sm text-amber-100/70">{t("setup.tagline")}</p>
+
+      {resumable && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex w-full max-w-sm gap-2">
+          <button onClick={onResume} className="chunky-btn chunky-green flex min-w-0 flex-1 flex-col items-center rounded-2xl px-4 py-3">
+            <span className="flex items-center gap-2 text-xl">
+              <Play className="h-5 w-5" /> {t("setup.resume")}
+            </span>
+            <span className="text-xs opacity-90">{t("setup.resumeInfo", { n: resumable.game.dealNumber, opp: opponents, ago: timeAgo(resumable.savedAt, t) })}</span>
+          </button>
+          <button onClick={onRestart} title={t("setup.restart")} className="chunky-btn chunky-dark flex shrink-0 flex-col items-center justify-center gap-0.5 rounded-2xl px-3 text-xs">
+            <RotateCcw className="h-5 w-5" /> {t("setup.restart")}
+          </button>
+        </motion.div>
+      )}
+
+      {/* Modus-Auswahl */}
+      <div className="w-full">
+        <div className="mb-2 text-xs font-bold uppercase tracking-[0.18em] text-amber-100/50">{t("setup.chooseMode")}</div>
+        <div className="grid gap-2.5 sm:grid-cols-3">
+          {MODES.map((m, i) => (
+            <motion.button
+              key={m.id}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 + i * 0.07 }}
+              whileHover={{ y: -4 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => onMode(m.id)}
+              className={`relative flex items-center gap-3 overflow-hidden rounded-2xl bg-gradient-to-br p-4 text-left ring-2 transition sm:flex-col sm:items-center sm:text-center ${m.tone}`}
+            >
+              {m.id === "oracle" && (
+                <motion.span
+                  aria-hidden
+                  className="absolute inset-0 rounded-2xl"
+                  animate={{ boxShadow: ["inset 0 0 12px #a855f7", "inset 0 0 28px #e879f9", "inset 0 0 12px #a855f7"] }}
+                  transition={{ repeat: Infinity, duration: 2.4 }}
+                />
+              )}
+              <span className="shrink-0 text-amber-100">{m.icon}</span>
+              <span>
+                <span className="font-display text-stroke block text-lg leading-tight text-white">{t(`mode.${m.id}.title` as Key)}</span>
+                <span className="mt-0.5 block text-xs leading-snug text-amber-100/70">{t(`mode.${m.id}.desc` as Key)}</span>
+              </span>
+            </motion.button>
+          ))}
+        </div>
+      </div>
+
+      <button onClick={onRules} className="chunky-btn chunky-dark flex w-full max-w-sm items-center justify-center gap-2 rounded-2xl py-3">
+        <BookOpen className="h-5 w-5" /> {t("setup.rules")}
+      </button>
+      {/* Auf niedrigen Bildschirmen weichen die Figuren, damit „Mehr über TAC“ sichtbar bleibt */}
+      <div className="flex -space-x-2 [@media(max-height:860px)]:hidden">
         {PERSONAS.map((p, i) => (
-          <motion.div key={p.id} initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.35 + i * 0.05 }}>
-            <Character look={p.id} color={i % 4} size={40} />
+          <motion.div key={p.id} initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 + i * 0.05 }}>
+            <Character look={p.id} color={i % 4} size={36} />
           </motion.div>
         ))}
       </div>
-
-      <div className="flex w-full max-w-xs flex-col gap-3">
-        {resumable && (
-          <motion.button
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            onClick={onResume}
-            className="chunky-btn chunky-green flex flex-col items-center rounded-2xl px-4 py-3"
-          >
-            <span className="flex items-center gap-2 text-xl">
-              <RotateCcw className="h-5 w-5" /> Weiterspielen
-            </span>
-            <span className="text-xs opacity-90">
-              Runde {resumable.game.dealNumber} gegen {opponents} · {timeAgo(resumable.savedAt)}
-            </span>
-          </motion.button>
-        )}
-        <button onClick={onNew} className={`chunky-btn ${resumable ? "chunky-blue" : "chunky-green"} flex items-center justify-center gap-2 rounded-2xl py-3.5 text-xl`}>
-          <Play className="h-5 w-5" /> Neues Spiel
-        </button>
-        <button onClick={onRules} className="chunky-btn chunky-dark flex items-center justify-center gap-2 rounded-2xl py-3">
-          <BookOpen className="h-5 w-5" /> Wie spiele ich TAC?
-        </button>
-      </div>
-      <a href="#ueber-tac" className="flex flex-col items-center text-xs font-semibold text-amber-100/40 transition hover:text-amber-100/70">
-        Mehr über TAC
-        <ChevronDown className="h-4 w-4 animate-bounce" />
+      <a
+        href="#ueber-tac"
+        onClick={(e) => {
+          const el = document.getElementById("ueber-tac");
+          if (!el) return;
+          e.preventDefault();
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          history.replaceState(null, "", "#ueber-tac");
+        }}
+        className="flex flex-col items-center text-sm font-semibold text-amber-100/70 transition-colors hover:text-amber-100"
+      >
+        {t("setup.more")}
+        <motion.span animate={{ y: [0, 5, 0] }} transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}>
+          <ChevronDown className="h-5 w-5" />
+        </motion.span>
       </a>
     </div>
   );
 }
 
-function Panel({ step, children }: { step: number; children: React.ReactNode }) {
-  const s = STEPS[step - 1];
+function Panel({ title, sub, step, total, badge, children }: { title: string; sub: string; step: number; total: number; badge?: boolean; children: React.ReactNode }) {
   return (
     <div className="rounded-[2rem] border border-amber-200/15 bg-[#1c120b]/85 p-5 shadow-2xl backdrop-blur sm:p-8">
-      {/* Fortschritt */}
-      <div className="mb-4 flex justify-center gap-1.5" aria-label={`Schritt ${step} von ${STEPS.length}`}>
-        {STEPS.map((_, i) => (
-          <motion.span
-            key={i}
-            animate={{ width: i + 1 === step ? 28 : 8, opacity: i + 1 <= step ? 1 : 0.3 }}
-            className="h-2 rounded-full bg-amber-300"
-          />
-        ))}
+      <div className="mb-4 flex items-center justify-between">
+        {/* Fortschritt */}
+        <div className="flex gap-1.5" aria-label={`${step + 1} / ${total}`}>
+          {Array.from({ length: total }, (_, i) => (
+            <motion.span key={i} animate={{ width: i === step ? 28 : 8, opacity: i <= step ? 1 : 0.3 }} className="h-2 rounded-full bg-amber-300" />
+          ))}
+        </div>
+        {badge && <OracleBadge />}
       </div>
-      <h2 className="font-display text-stroke text-center text-3xl text-amber-100">{s.title}</h2>
-      <p className="mb-5 text-center text-sm text-amber-100/60">{s.sub}</p>
+      <h2 className="font-display text-stroke text-center text-3xl text-amber-100">{title}</h2>
+      <p className="mb-5 text-center text-sm text-amber-100/60">{sub}</p>
       {children}
+    </div>
+  );
+}
+
+function DifficultyPicker({ difficulty, setDifficulty }: { difficulty: Difficulty; setDifficulty: (d: Difficulty) => void }) {
+  const { t } = useT();
+  return (
+    <div className="grid gap-2 sm:grid-cols-3">
+      {LEVELS.map((l) => (
+        <button
+          key={l.id}
+          onClick={() => setDifficulty(l.id)}
+          className={`rounded-2xl p-3 text-left ring-1 transition ${difficulty === l.id ? "bg-amber-300/20 ring-2 ring-amber-300" : "bg-black/20 ring-amber-200/15 hover:bg-black/30"}`}
+        >
+          <div className="flex items-center gap-2 font-bold text-amber-50">
+            {l.icon}
+            {t(`diff.${l.id}`)}
+          </div>
+          <p className="mt-0.5 text-xs text-amber-100/60">{t(`lvl.${l.id}`)}</p>
+        </button>
+      ))}
     </div>
   );
 }
@@ -249,8 +377,7 @@ function Options({
   setMaster,
   speed,
   setSpeed,
-  bots,
-  name,
+  lineup,
 }: {
   difficulty: Difficulty;
   setDifficulty: (d: Difficulty) => void;
@@ -258,9 +385,11 @@ function Options({
   setMaster: (m: boolean) => void;
   speed: number;
   setSpeed: (s: number) => void;
-  bots: string[];
-  name: string;
+  /** Name des Spielers, dann die Charaktere auf Platz 1–3 */
+  lineup: string[];
 }) {
+  const { t, lang } = useT();
+  const label = (seat: number) => (seat === 0 ? lineup[0] : personaById(lineup[seat])![lang].name);
   return (
     <div className="space-y-4">
       {/* Aufstellung */}
@@ -268,35 +397,19 @@ function Options({
         {[
           [0, 2],
           [1, 3],
-        ].map((team, t) => (
-          <div key={t} className="flex flex-col items-center">
+        ].map((team, i) => (
+          <div key={i} className="flex flex-col items-center">
             <div className="flex -space-x-2">
               {team.map((seat) => (
-                <Character key={seat} look={seat === 0 ? "ritter" : lookOf(bots[seat - 1])} color={seat} size={52} />
+                <Character key={seat} look={seat === 0 ? "ritter" : lookOf(lineup[seat])} color={seat} size={52} />
               ))}
             </div>
-            <span className="mt-1 text-xs font-bold text-amber-100/80">
-              {team.map((seat) => (seat === 0 ? name : personaById(bots[seat - 1])!.name)).join(" & ")}
-            </span>
+            <span className="mt-1 text-xs font-bold text-amber-100/80">{team.map(label).join(" & ")}</span>
           </div>
         ))}
       </div>
 
-      <div className="grid gap-2 sm:grid-cols-3">
-        {LEVELS.map((l) => (
-          <button
-            key={l.id}
-            onClick={() => setDifficulty(l.id)}
-            className={`rounded-2xl p-3 text-left ring-1 transition ${difficulty === l.id ? "bg-amber-300/20 ring-2 ring-amber-300" : "bg-black/20 ring-amber-200/15 hover:bg-black/30"}`}
-          >
-            <div className="flex items-center gap-2 font-bold text-amber-50">
-              {l.icon}
-              {l.title}
-            </div>
-            <p className="mt-0.5 text-xs text-amber-100/60">{l.text}</p>
-          </button>
-        ))}
-      </div>
+      <DifficultyPicker difficulty={difficulty} setDifficulty={setDifficulty} />
 
       <div className="grid gap-2 sm:grid-cols-2">
         <button
@@ -305,33 +418,102 @@ function Options({
         >
           <Crown className={`h-6 w-6 shrink-0 ${master ? "text-purple-200" : "text-amber-100/50"}`} />
           <div>
-            <div className="font-bold text-amber-50">Meisterversion {master ? "an" : "aus"}</div>
-            <p className="text-xs text-amber-100/60">Engel, Teufel, Krieger &amp; Narr</p>
+            <div className="font-bold text-amber-50">{t(master ? "opt.masterOn" : "opt.masterOff")}</div>
+            <p className="text-xs text-amber-100/60">{t("opt.masterDesc")}</p>
           </div>
         </button>
         <label className="flex items-center gap-3 rounded-2xl bg-black/20 p-3 ring-1 ring-amber-200/15">
           <Gauge className="h-6 w-6 shrink-0 text-amber-100/50" />
           <div className="flex-1">
             <div className="flex justify-between font-bold text-amber-50">
-              Tempo <span className="text-sm text-amber-200">{speed < 0.8 ? "gemütlich" : speed > 1.4 ? "schnell" : "normal"}</span>
+              {t("opt.tempo")} <span className="text-sm text-amber-200">{t(speed < 0.8 ? "tempo.slow" : speed > 1.4 ? "tempo.fast" : "tempo.normal")}</span>
             </div>
             <input type="range" min={0.5} max={2} step={0.25} value={speed} onChange={(e) => setSpeed(Number(e.target.value))} className="mt-1 w-full accent-amber-400" />
           </div>
         </label>
       </div>
-      <div className="flex justify-center gap-1.5" aria-hidden>
-        {PLAYER_COLORS.map((c, i) => (
-          <span key={i} className="h-3 w-3 rounded-full" style={{ background: c.hex }} />
-        ))}
-      </div>
     </div>
   );
 }
 
-function timeAgo(ts: number): string {
+/** Einweisung für „Das blinde Orakel“. */
+function OracleBriefing({ difficulty, setDifficulty, name }: { difficulty: Difficulty; setDifficulty: (d: Difficulty) => void; name: string }) {
+  const { t, lang } = useT();
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-around rounded-2xl bg-gradient-to-br from-purple-900/50 to-black/30 p-3 ring-1 ring-fuchsia-300/30">
+        <div className="flex flex-col items-center">
+          <div className="flex -space-x-2">
+            <Character look="ritter" color={0} size={52} />
+            <motion.div animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 2.2 }}>
+              <Character look={ORACLE.id} color={2} size={52} />
+            </motion.div>
+          </div>
+          <span className="mt-1 text-xs font-bold text-amber-100/80">
+            {name} & {ORACLE[lang].name}
+          </span>
+        </div>
+        <span className="font-display text-stroke text-2xl text-fuchsia-200">VS</span>
+        <div className="flex flex-col items-center">
+          <div className="flex -space-x-2">
+            <Character look={ORACLE_OPPONENTS[0]} color={1} size={52} />
+            <Character look={ORACLE_OPPONENTS[1]} color={3} size={52} />
+          </div>
+          <span className="mt-1 text-xs font-bold text-amber-100/80">{ORACLE_OPPONENTS.map((id) => personaById(id)![lang].name).join(" & ")}</span>
+        </div>
+      </div>
+      <ul className="space-y-2 text-sm text-amber-50/85">
+        {(["oracle.p1", "oracle.p2", "oracle.p3", "oracle.p4"] as const).map((k, i) => (
+          <motion.li key={k} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 * i }} className="flex gap-2">
+            <Eye className="mt-0.5 h-4 w-4 shrink-0 text-fuchsia-300" />
+            {t(k)}
+          </motion.li>
+        ))}
+      </ul>
+      <DifficultyPicker difficulty={difficulty} setDifficulty={setDifficulty} />
+    </div>
+  );
+}
+
+/** Raum erstellen oder mit Code beitreten. */
+function FriendsEntry({ onRoom }: { onRoom: (code: string, create: boolean) => void }) {
+  const { t } = useT();
+  const [code, setCode] = useState("");
+  return (
+    <div className="space-y-4">
+      <button onClick={() => onRoom(newRoomCode(), true)} className="chunky-btn chunky-blue flex w-full items-center justify-center gap-2 rounded-2xl py-3.5 text-xl">
+        <Plus className="h-5 w-5" /> {t("lobby.create")}
+      </button>
+      <div className="flex items-center gap-3 text-xs font-bold uppercase tracking-wider text-amber-100/40">
+        <span className="h-px flex-1 bg-amber-100/15" /> {t("lobby.or")} <span className="h-px flex-1 bg-amber-100/15" />
+      </div>
+      <form
+        className="flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const c = normalizeRoomCode(code);
+          if (c) onRoom(c, false);
+        }}
+      >
+        <input
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder={t("lobby.enterCode")}
+          autoCapitalize="none"
+          className="font-display min-w-0 flex-1 rounded-2xl bg-black/30 px-4 py-3 text-lg text-amber-50 ring-2 ring-amber-200/20 placeholder:text-amber-100/25 focus:outline-none focus:ring-amber-300/70"
+        />
+        <button className="chunky-btn chunky-green flex items-center gap-1.5 rounded-2xl px-4" disabled={!normalizeRoomCode(code)}>
+          <LogIn className="h-5 w-5" /> {t("lobby.join")}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function timeAgo(ts: number, t: ReturnType<typeof useT>["t"]): string {
   const min = Math.round((Date.now() - ts) / 60000);
-  if (min < 1) return "gerade eben";
-  if (min < 60) return `vor ${min} Min.`;
+  if (min < 1) return t("ago.now");
+  if (min < 60) return t("ago.min", { n: min });
   const h = Math.round(min / 60);
-  return h < 24 ? `vor ${h} Std.` : `vor ${Math.round(h / 24)} Tagen`;
+  return h < 24 ? t("ago.h", { n: h }) : t("ago.d", { n: Math.round(h / 24) });
 }

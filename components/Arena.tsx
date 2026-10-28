@@ -7,7 +7,10 @@ import type { GameState } from "@/types/game";
 import { EMOTES, useGameStore, type FxEvent } from "@/store/gameStore";
 import { PLAYER_COLORS, teamOf } from "@/lib/engine/constants";
 import { haptics } from "@/lib/haptics";
+import { relSeat } from "@/lib/layout";
 import { lookOf, personaById } from "@/lib/personas";
+import { useGameText, useT } from "@/lib/useI18n";
+import { LangSwitch } from "./LangSwitch";
 import { CardBack } from "./CardView";
 import { Character, type Mood } from "./Character";
 import { Sidebar } from "./Sidebar";
@@ -15,6 +18,7 @@ import { Sidebar } from "./Sidebar";
 /**
  * Spielerkarten sitzen außerhalb des Bretts an der Ecke ihres Vorfelds:
  * schmal (Handy, Tablet) über bzw. unter dem Brett, breit (xl) links bzw. rechts daneben.
+ * Schlüssel = Platz aus Sicht des Betrachters (0 = unten, 1 = links, 2 = oben, 3 = rechts).
  */
 const PLATE_POS: Record<number, string> = {
   2: "bottom-full left-0 mb-2 xl:bottom-auto xl:top-0 xl:left-auto xl:right-full xl:mb-0 xl:mr-5",
@@ -24,9 +28,9 @@ const PLATE_POS: Record<number, string> = {
 };
 
 /** Liegt die Spielerkarte oberhalb des Bretts? Dann zeigen Blasen nach unten (zum Brett hin). */
-const isTopSeat = (p: number) => p === 2 || p === 3;
+const isTopSeat = (p: number) => relSeat(p) === 2 || relSeat(p) === 3;
 /** Rechte Spielerkarten werden gespiegelt, damit der Avatar außen sitzt. */
-const isRightSeat = (p: number) => p === 0 || p === 3;
+const isRightSeat = (p: number) => relSeat(p) === 0 || relSeat(p) === 3;
 
 /** Aktuelle Stimmung einer Figur – läuft nach `until` automatisch zurück auf idle bzw. „denkt nach“. */
 function useMood(player: number, active: boolean): Mood {
@@ -50,10 +54,12 @@ export function PlayerPlate({ game, player, active }: { game: GameState; player:
   const thinking = useGameStore((s) => s.thinking) && active && player !== 0;
   const skipped = active && game.skipPending;
   const right = isRightSeat(player);
-  const title = personaById(p.persona)?.title ?? "Ritter";
+  const { t, lang, name } = useGameText(game);
+  const me = useGameStore((s) => s.mySeats[0] ?? 0);
+  const title = personaById(p.persona)?.[lang].title ?? t("plate.ritter");
 
   return (
-    <div className={`pointer-events-none absolute z-20 max-w-[49%] xl:w-36 xl:max-w-none ${PLATE_POS[player]}`}>
+    <div className={`pointer-events-none absolute z-20 max-w-[49%] xl:w-36 xl:max-w-none ${PLATE_POS[relSeat(player)]}`}>
       <motion.div
         animate={{ scale: active ? 1.04 : 1 }}
         transition={{ type: "spring", stiffness: 400, damping: 25 }}
@@ -87,8 +93,8 @@ export function PlayerPlate({ game, player, active }: { game: GameState; player:
         <div className={`flex min-w-0 flex-col ${right ? "items-end" : "items-start"} xl:items-center`}>
           {/* max-w-full: lange Namen/Titel werden gekürzt statt aus der Karte zu ragen */}
           <span className="font-display text-stroke flex max-w-full items-center gap-1 text-[13px] leading-tight text-white sm:text-sm">
-            <span className="truncate">{p.name}</span>
-            {teamOf(player) === 0 && player !== 0 && <Crown className="h-3 w-3 shrink-0 text-amber-300" aria-label="Partner" />}
+            <span className="truncate">{name(player)}</span>
+            {teamOf(player) === teamOf(me) && player !== me && <Crown className="h-3 w-3 shrink-0 text-amber-300" aria-label={t("plate.partner")} />}
           </span>
           <span className="block max-w-full truncate text-[9px] font-bold uppercase leading-tight tracking-wider" style={{ color: col.light }}>
             {title}
@@ -96,7 +102,7 @@ export function PlayerPlate({ game, player, active }: { game: GameState; player:
           <div className="mt-0.5 flex h-4 items-center gap-1">
             <AnimatePresence mode="wait" initial={false}>
               {skipped ? (
-                <Status key="skip" className="bg-red-600">setzt aus</Status>
+                <Status key="skip" className="bg-red-600">{t("plate.skip")}</Status>
               ) : thinking ? (
                 <Status key="think" className="bg-black/40">
                   <ThinkingDots />
@@ -233,34 +239,37 @@ function ChatBubble({ player }: { player: number }) {
   );
 }
 
-const FX_STYLE: Record<FxEvent["kind"], { text: string; from: string; to: string; glow: string }> = {
-  kick: { text: "RAUSGEWORFEN!", from: "#ff6b6b", to: "#b91c1c", glow: "#ef4444" },
-  home: { text: "IM HAUS!", from: "#fff3a0", to: "#f59e0b", glow: "#fcd34d" },
-  tac: { text: "TAC!", from: "#e9b5ff", to: "#7c3aed", glow: "#a855f7" },
-  win: { text: "SIEG!", from: "#fff3a0", to: "#f59e0b", glow: "#fcd34d" },
+const FX_STYLE: Record<FxEvent["kind"], { from: string; to: string; glow: string }> = {
+  kick: { from: "#ff6b6b", to: "#b91c1c", glow: "#ef4444" },
+  home: { from: "#fff3a0", to: "#f59e0b", glow: "#fcd34d" },
+  tac: { from: "#e9b5ff", to: "#7c3aed", glow: "#a855f7" },
+  win: { from: "#fff3a0", to: "#f59e0b", glow: "#fcd34d" },
 };
 
 /** Große Einblendung über dem Brett (Kick, Haus, TAC, Sieg) inklusive Partikel. */
 export function FxOverlay({ game }: { game: GameState }) {
   const fx = useGameStore((s) => s.fx);
+  const me = useGameStore((s) => s.mySeats[0] ?? 0);
+  const { t, name } = useGameText(game);
   const [shown, setShown] = useState<FxEvent | null>(null);
 
   useEffect(() => {
     if (!fx) return;
     setShown(fx);
-    const t = setTimeout(() => setShown(null), fx.kind === "win" ? 2400 : 1300);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setShown(null), fx.kind === "win" ? 2400 : 1300);
+    return () => clearTimeout(timer);
   }, [fx?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const style = shown ? FX_STYLE[shown.kind] : null;
-  const text = shown?.kind === "win" ? (shown.player === 0 ? "SIEG!" : "NIEDERLAGE") : style?.text;
+  // Beim Sieg ist shown.player das Siegerteam
+  const text = !shown ? "" : shown.kind === "win" ? t(shown.player === teamOf(me) ? "fx.win" : "fx.lose") : t(`fx.${shown.kind}`);
   const sub =
     shown?.kind === "kick"
-      ? `${game.players[shown.player].name} schlägt ${shown.victims.map((v) => game.players[v].name).join(" & ")}`
+      ? t("fx.kickSub", { who: name(shown.player), victims: shown.victims.map(name).join(" & ") })
       : shown?.kind === "home"
-        ? `${game.players[shown.player].name} bringt eine Kugel heim`
+        ? t("fx.homeSub", { who: name(shown.player) })
         : shown?.kind === "tac"
-          ? `${game.players[shown.player].name} nimmt den Zug zurück`
+          ? t("fx.tacSub", { who: name(shown.player) })
           : null;
 
   return (
@@ -344,6 +353,7 @@ export function EmoteButton() {
   const [open, setOpen] = useState(false);
   const [cooldown, setCooldown] = useState(false);
   const emote = useGameStore((s) => s.emote);
+  const { t } = useT();
 
   const send = (e: string) => {
     if (cooldown) return;
@@ -389,7 +399,7 @@ export function EmoteButton() {
           setOpen((o) => !o);
         }}
         className={`chunky-btn chunky-blue relative flex h-14 w-14 items-center justify-center rounded-2xl ${cooldown ? "opacity-60" : ""}`}
-        aria-label="Emotes"
+        aria-label={t("aria.emotes")}
       >
         {open ? <X className="h-7 w-7" strokeWidth={3} /> : <Smile className="h-7 w-7" strokeWidth={2.6} />}
       </motion.button>
@@ -401,6 +411,7 @@ export function EmoteButton() {
 export function SidebarDrawer({ game }: { game: GameState }) {
   const open = useGameStore((s) => s.drawerOpen);
   const setOpen = useGameStore((s) => s.setDrawerOpen);
+  const { t } = useT();
   const chatLen = useGameStore((s) => s.chat.length);
   const [seen, setSeen] = useState(chatLen);
   const unread = open ? 0 : Math.max(0, chatLen - seen);
@@ -418,7 +429,7 @@ export function SidebarDrawer({ game }: { game: GameState }) {
           setOpen(true);
         }}
         className="chunky-btn chunky-gold fixed bottom-[max(0.75rem,env(safe-area-inset-bottom))] right-3 z-40 flex h-14 w-14 items-center justify-center rounded-2xl"
-        aria-label="Spielverlauf und Chat"
+        aria-label={t("aria.drawer")}
       >
         <MessageCircle className="h-7 w-7" strokeWidth={2.6} />
         {unread > 0 && (
@@ -456,6 +467,8 @@ export function SidebarDrawer({ game }: { game: GameState }) {
               className="fixed inset-x-0 bottom-0 z-50 flex h-[72dvh] flex-col rounded-t-3xl border-t-[3px] border-[#1b1630] bg-[#1c120b] p-2 pt-1 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-2xl"
             >
               <div className="mx-auto my-2 h-1.5 w-12 shrink-0 rounded-full bg-amber-100/30" />
+              {/* Auf dem Handy ist im Kopf kein Platz – hier lässt sich die Sprache wechseln */}
+              <LangSwitch className="mx-auto mb-2 w-max" />
               <div className="min-h-0 flex-1">
                 <Sidebar game={game} />
               </div>

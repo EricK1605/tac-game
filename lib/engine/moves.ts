@@ -10,7 +10,8 @@ import {
   withMoved,
   allHome,
 } from "./board";
-import { BASE, HOME_OFFSET, PLAYER_COLORS, isHome, isRing, nextPlayer, partnerOf, startOf } from "./constants";
+import { BASE, HOME_OFFSET, ORACLE_SEAT, isHome, isRing, nextPlayer, partnerOf, startOf } from "./constants";
+import { ph, type Phrase } from "@/lib/i18n";
 
 interface Ctx {
   state: GameState;
@@ -40,12 +41,9 @@ function mk(ctx: Ctx, effect: CardValue | null, kind: MoveKind, board: Marble[],
   };
 }
 
-const colorName = (c: number) => PLAYER_COLORS[c].name;
-
-function captureSuffix(before: Marble[], captured: number[]) {
+function captureSuffix(before: Marble[], captured: number[]): Phrase {
   if (!captured.length) return "";
-  const names = captured.map((id) => colorName(before[id].color));
-  return ` und wirft ${names.join(", ")}`;
+  return ph("cap", { who: { j: captured.map((id) => ({ col: before[id].color })) } });
 }
 
 // ---------------------------------------------------------------- Einzelne Effekte
@@ -63,7 +61,7 @@ function enterMoves(board: Marble[], ctx: Ctx, effect: CardValue, colors: number
     if (occupant !== -1) nb = withMoved(nb, occupant, BASE);
     const m = mk(ctx, effect, "enter", nb, board, { marbleId: mb.id, target: s });
     m.anims = [{ marbleId: mb.id, path: [s] }];
-    m.label = `bringt eine ${colorName(c).toLowerCase()}e Kugel ins Spiel${captureSuffix(board, m.captured)}`;
+    m.label = ph("mv.enter", { adj: { adj: c }, cap: captureSuffix(board, m.captured) });
     out.push(m);
   }
   return out;
@@ -81,8 +79,15 @@ function stepMoves(board: Marble[], ctx: Ctx, effect: CardValue, k: number, dir:
       if (r.captured !== null) nb = withMoved(nb, r.captured, BASE);
       const mv = mk(ctx, effect, "steps", nb, board, { marbleId: m.id, target: r.to });
       mv.anims = [{ marbleId: m.id, path: r.path }];
-      const where = isHome(r.to) ? (isHome(m.pos) ? " im Haus" : " ins Haus") : "";
-      mv.label = `zieht ${colorName(m.color)} ${k} ${k === 1 ? "Feld" : "Felder"}${dir < 0 ? " rückwärts" : ""}${where}${captureSuffix(board, mv.captured)}`;
+      const where: Phrase = isHome(r.to) ? ph(isHome(m.pos) ? "where.inHome" : "where.home") : "";
+      mv.label = ph("mv.steps", {
+        col: { col: m.color },
+        n: k,
+        unit: ph(k === 1 ? "unit.one" : "unit.many"),
+        dir: dir < 0 ? ph("dir.back") : "",
+        where,
+        cap: captureSuffix(board, mv.captured),
+      });
       out.push(mv);
     }
   }
@@ -177,8 +182,8 @@ export function buildSevenMove(ctx: Ctx, effect: CardValue, before: Marble[], af
   const byMarble = new Map<number, number[]>();
   for (const s of segments) byMarble.set(s.marbleId, [...(byMarble.get(s.marbleId) ?? []), ...s.path]);
   mv.anims = [...byMarble.entries()].map(([marbleId, path]) => ({ marbleId, path }));
-  const parts = [...byMarble.entries()].map(([id, p]) => `${colorName(before[id].color)} ${p.length}`);
-  mv.label = `teilt die 7 auf (${parts.join(" + ")})${captureSuffix(before, mv.captured)}`;
+  const parts: Phrase[] = [...byMarble.entries()].map(([id, p]) => ({ j: [{ col: before[id].color }, String(p.length)], s: " " }));
+  mv.label = ph("mv.seven", { parts: { j: parts, s: " + " }, cap: captureSuffix(before, mv.captured) });
   if (segments.length === 1) {
     mv.marbleId = segments[0].marbleId;
     mv.target = after[segments[0].marbleId].pos;
@@ -219,7 +224,7 @@ function swapMoves(board: Marble[], ctx: Ctx, effect: CardValue): Move[] {
         { marbleId: a.id, path: [b.pos] },
         { marbleId: b.id, path: [a.pos] },
       ];
-      mv.label = `tauscht ${colorName(a.color)} ↔ ${colorName(b.color)}`;
+      mv.label = ph("mv.swap", { a: { col: a.color }, b: { col: b.color } });
       out.push(mv);
     }
   return out;
@@ -245,7 +250,7 @@ function warriorMoves(board: Marble[], ctx: Ctx, effect: CardValue): Move[] {
       const nb = withMoved(board, m.id, BASE);
       const mv = mk(ctx, effect, "warrior", nb, board, { marbleId: m.id, target: m.pos });
       mv.anims = [{ marbleId: m.id, path: [...path, BASE] }];
-      mv.label = `wirft sich mit dem Krieger selbst`;
+      mv.label = ph("mv.warriorSelf");
       out.push(mv);
       continue;
     }
@@ -254,7 +259,7 @@ function warriorMoves(board: Marble[], ctx: Ctx, effect: CardValue): Move[] {
     nb = withMoved(nb, m.id, to, false);
     const mv = mk(ctx, effect, "warrior", nb, board, { marbleId: m.id, target: to });
     mv.anims = [{ marbleId: m.id, path }];
-    mv.label = `stürmt mit ${colorName(m.color)} los${captureSuffix(board, mv.captured)}`;
+    mv.label = ph("mv.warrior", { col: { col: m.color }, cap: captureSuffix(board, mv.captured) });
     out.push(mv);
   }
   return out;
@@ -271,7 +276,7 @@ function angelMoves(board: Marble[], ctx: Ctx, effect: CardValue): Move[] {
       ...stepMoves(board, ctx, effect, 1, 1, [target], true),
       ...stepMoves(board, ctx, effect, 13, 1, [target], true),
     ];
-  for (const m of moves) m.label = `Engel für ${colorName(target)}: ${m.label}`;
+  for (const m of moves) m.label = ph("mv.angel", { col: { col: target }, inner: m.label });
   return moves;
 }
 
@@ -293,7 +298,7 @@ export function movesForEffect(board: Marble[], effect: CardValue, ctx: Ctx): Mo
       const moves = stepMoves(board, ctx, effect, 8, 1);
       if (hasRingMarble(board, cols) && state.players[next].hand.length > 0) {
         const mv = mk(ctx, effect, "skip", board, board);
-        mv.label = `lässt ${state.players[next].name} aussetzen`;
+        mv.label = ph("mv.skip", { who: { pl: next } });
         moves.push(mv);
       }
       return moves;
@@ -307,13 +312,13 @@ export function movesForEffect(board: Marble[], effect: CardValue, ctx: Ctx): Mo
     case "teufel": {
       const has = state.players[next].hand.length > 0;
       const mv = mk(ctx, effect, has ? "devil" : "void", board, board);
-      mv.label = has ? `spielt den Teufel gegen ${state.players[next].name}` : "– der Teufel verfällt";
+      mv.label = has ? ph("mv.devil", { who: { pl: next } }) : ph("mv.devilVoid");
       return [mv];
     }
     case "narr": {
       const has = state.players[next].hand.length > 0;
       const mv = mk(ctx, effect, has ? "jester" : "void", board, board);
-      mv.label = has ? "– alle geben ihre Karten nach rechts weiter" : "– der Narr verfällt";
+      mv.label = has ? ph("mv.jester") : ph("mv.jesterVoid");
       return [mv];
     }
     case "tac":
@@ -341,16 +346,15 @@ function tacMoves(ctx: Ctx): Move[] {
   if (!base) return [];
   const { board, entry } = base;
   const moves = movesForEffect(board, entry.effect!, ctx);
-  const who = ctx.state.players[entry.player].name;
   for (const m of moves) {
     m.tacUndo = { player: entry.player, effect: entry.effect };
     m.baseBoard = board;
-    m.label = `${entry.discarded ? "übernimmt" : `nimmt den Zug von ${who} zurück und nutzt`} ${labelOf(entry.effect!)}: ${m.label}`;
+    m.label = entry.discarded
+      ? ph("mv.tacDiscarded", { card: { card: entry.effect! }, inner: m.label })
+      : ph("mv.tac", { who: { pl: entry.player }, card: { card: entry.effect! }, inner: m.label });
   }
   return moves;
 }
-
-const labelOf = (v: CardValue) => (typeof v === "number" ? String(v) : v[0].toUpperCase() + v.slice(1));
 
 export function cardMoves(state: GameState, card: Card, actor: number, handOwner: number): Move[] {
   const ctx: Ctx = { state, actor, handOwner, card };
@@ -368,7 +372,7 @@ function discardMoves(state: GameState, owner: number, cards: Card[]): Move[] {
     board: state.marbles,
     anims: [],
     captured: [],
-    label: "legt eine Karte ungenutzt ab",
+    label: ph("mv.discard"),
   }));
 }
 
@@ -404,6 +408,22 @@ export function decider(state: GameState): number {
 /** Wessen Handkarten werden gerade gespielt? */
 export function activeHandOwner(state: GameState): number {
   return state.subTurn?.type === "devil" ? state.subTurn.target : state.current;
+}
+
+/** Orakel-Modus: Karten des blinden Orakels, die der Spieler nicht kennt. */
+export function hiddenCards(state: GameState): Set<string> {
+  if (state.mode !== "oracle") return new Set();
+  const known = new Set(state.oracleKnown ?? []);
+  return new Set(state.players[ORACLE_SEAT].hand.filter((c) => !known.has(c.id)).map((c) => c.id));
+}
+
+/** Züge einer blind gezogenen Karte – ist sie nicht spielbar, verfällt sie. */
+export function blindMoves(state: GameState, cardId: string): Move[] {
+  const moves = legalMoves(state).filter((m) => m.cardId === cardId);
+  if (moves.length) return moves;
+  const owner = activeHandOwner(state);
+  const card = state.players[owner].hand.find((c) => c.id === cardId);
+  return card ? discardMoves(state, owner, [card]) : [];
 }
 
 export function hasOpener(cards: Card[]) {

@@ -3,6 +3,7 @@ import { allHome, controllableColors, ringDist } from "@/lib/engine/board";
 import { BASE, HOME_OFFSET, isHome, isRing, partnerOf, startOf, teamOf } from "@/lib/engine/constants";
 import { activeHandOwner, cardMoves, decider, legalMoves } from "@/lib/engine/moves";
 import { NEUTRAL_STYLE, personaById, type CommentKind, type Playstyle } from "@/lib/personas";
+import { LISTS, type Lang } from "@/lib/i18n";
 
 /**
  * KI-Gegner für TAC.
@@ -267,18 +268,8 @@ export function chooseSwapCard(s: GameState, player: number, difficulty: Difficu
 }
 
 /** Kurzer Kommentar des Bots zur Spielsituation – bevorzugt im Tonfall seines Charakters. */
-export function botComment(kind: Exclude<CommentKind, "greet">, persona?: string | null): string {
-  const own = personaById(persona)?.lines[kind];
-  if (own?.length && Math.random() < 0.8) return own[Math.floor(Math.random() * own.length)];
-  const lines: Record<typeof kind, string[]> = {
-    capturedEnemy: ["Ab nach Hause mit dir! 😏", "Tschüss!", "Das musste sein.", "Erwischt!"],
-    gotCaptured: ["Autsch! 😩", "Ouch!", "Das gibt Rache…", "Na warte!"],
-    partnerGood: ["Guter Zug, Partner! 👍", "Stark gespielt!", "Genau so!", "Klasse!"],
-    home: ["Eine mehr im Haus 🏠", "Sicher geparkt.", "Läuft bei uns!"],
-    tac: ["TAC! 😈", "Nicht so schnell!", "Das nehme ich mal zurück…"],
-    win: ["Gewonnen! 🎉", "Teamwork makes the dream work!"],
-    lose: ["Gut gespielt…", "Nächstes Mal!"],
-  };
-  const arr = lines[kind];
+export function botComment(kind: Exclude<CommentKind, "greet">, persona: string | null | undefined, lang: Lang): string {
+  const own = personaById(persona)?.[lang].lines[kind];
+  const arr = own?.length && Math.random() < 0.8 ? own : LISTS[lang][kind];
   return arr[Math.floor(Math.random() * arr.length)];
 }

@@ -3,8 +3,9 @@
 import { useMemo } from "react";
 import type { Move } from "@/types/game";
 import { useGameStore } from "@/store/gameStore";
-import { activeHandOwner, decider, legalMoves, sevenSegments, tacBase } from "@/lib/engine/moves";
+import { activeHandOwner, decider, hiddenCards, legalMoves, sevenSegments, tacBase } from "@/lib/engine/moves";
 import { posPoint, marblePoint } from "@/lib/layout";
+import { playerName, useT } from "@/lib/useI18n";
 import type { BoardTarget } from "./Board";
 
 /** Leitet aus dem Spielzustand ab, was der menschliche Spieler gerade tun kann. */
@@ -16,6 +17,8 @@ export function useTurnControls() {
   const playMove = useGameStore((s) => s.playMove);
   const selectMarble = useGameStore((s) => s.selectMarble);
   const sevenStep = useGameStore((s) => s.sevenStep);
+  const mySeats = useGameStore((s) => s.mySeats);
+  const { t, lang } = useT();
 
   return useMemo(() => {
     const empty = {
@@ -34,13 +37,15 @@ export function useTurnControls() {
       onMarbleClick: (() => {}) as (id: number) => void,
     };
     if (!game || game.phase !== "play") return empty;
-    const humanTurn = game.players[decider(game)].isHuman;
+    // Am Zug ist ein Platz, der an diesem Gerät gespielt wird (Orakel: auch der Partner)
+    const humanTurn = mySeats.includes(decider(game));
     if (!humanTurn) return { ...empty, handOwner: 0 };
 
     const moves = legalMoves(game);
     const handOwner = activeHandOwner(game);
     const actor = handOwner;
-    const playable = new Set(moves.map((m) => m.cardId));
+    // Verdeckte Orakel-Karten dürfen immer blind gezogen werden
+    const playable = new Set([...moves.map((m) => m.cardId), ...hiddenCards(game)]);
     const mustDiscard = moves.length > 0 && moves.every((m) => m.kind === "discard");
     const cardMoves = moves.filter((m) => m.cardId === selectedCardId);
     const selectedCard = game.players[handOwner].hand.find((c) => c.id === selectedCardId);
@@ -51,7 +56,7 @@ export function useTurnControls() {
       const base = tacBase(game);
       if (base && !base.entry.discarded) {
         displayBoard = base.board;
-        preview = `TAC-Vorschau: Zug von ${game.players[base.entry.player].name} zurückgenommen`;
+        preview = t("board.tacPreview", { who: playerName(game.players[base.entry.player], lang) });
       }
     }
     if (seven) displayBoard = seven.board;
@@ -130,5 +135,5 @@ export function useTurnControls() {
       segmentsLeft: 0,
       onMarbleClick: (id: number) => selectMarble(id === selected ? null : id),
     };
-  }, [game, selectedCardId, selectedMarble, seven, playMove, selectMarble, sevenStep]);
+  }, [game, selectedCardId, selectedMarble, seven, playMove, selectMarble, sevenStep, mySeats, t, lang]);
 }

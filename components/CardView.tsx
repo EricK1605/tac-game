@@ -2,7 +2,9 @@
 
 import { Drama, Feather, Flame, Shuffle, Swords, Undo2 } from "lucide-react";
 import type { CardValue } from "@/types/game";
-import { CARD_HINT, cardLabel, isRedNumber } from "@/lib/engine/constants";
+import { isRedNumber } from "@/lib/engine/constants";
+import { cardName } from "@/lib/i18n";
+import { useT } from "@/lib/useI18n";
 
 const MASTER_ICON = { engel: Feather, teufel: Flame, krieger: Swords, narr: Drama } as const;
 
@@ -26,10 +28,11 @@ export function CardFace({ value, size = "md", dimmed, selected, className = "" 
   const red = isNum && isRedNumber(value);
   const master = value === "engel" || value === "teufel" || value === "krieger" || value === "narr";
   const Icon = master ? MASTER_ICON[value] : null;
+  const { t, lang } = useT();
 
   return (
     <div
-      title={CARD_HINT[String(value)]}
+      title={t(`hint.${String(value)}` as Parameters<typeof t>[0])}
       className={`relative select-none overflow-hidden border shadow-[0_6px_14px_rgba(0,0,0,0.45)] transition ${SIZES[size]} ${
         master
           ? "border-amber-300/70 bg-gradient-to-br from-[#2b1d3f] via-[#3d2a5c] to-[#1d1430] text-amber-200"
@@ -58,13 +61,13 @@ export function CardFace({ value, size = "md", dimmed, selected, className = "" 
       {value === "trickser" && (
         <div className="flex h-full flex-col items-center justify-center text-[#1f4e8c]">
           <Shuffle className="h-[0.75em] w-[0.75em]" strokeWidth={2.4} />
-          <span className="mt-1 text-[0.24em] font-bold uppercase tracking-wider">Trickser</span>
+          <span className="mt-1 text-[0.24em] font-bold uppercase tracking-wider">{cardName(lang, "trickser")}</span>
         </div>
       )}
       {Icon && (
         <div className="flex h-full flex-col items-center justify-center">
           <Icon className="h-[0.75em] w-[0.75em] drop-shadow-[0_0_6px_rgba(251,191,36,0.6)]" strokeWidth={2} />
-          <span className="mt-1 text-[0.24em] font-bold uppercase tracking-wider">{cardLabel(value)}</span>
+          <span className="mt-1 text-[0.24em] font-bold uppercase tracking-wider">{cardName(lang, value)}</span>
         </div>
       )}
     </div>

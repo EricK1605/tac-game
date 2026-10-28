@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { PLAYER_COLORS } from "@/lib/engine/constants";
 import { PERSONAS, personaById, type Persona } from "@/lib/personas";
 import { haptics } from "@/lib/haptics";
+import { useT } from "@/lib/useI18n";
 import { Character } from "./Character";
 
 /** Raster aller Charaktere plus Beschreibung des gerade gezeigten. */
@@ -19,7 +20,9 @@ function PersonaGrid({
   onPick: (id: Persona["id"]) => void;
 }) {
   const [hover, setHover] = useState<string | null>(null);
-  const shown = personaById(hover ?? bots[seat - 1])!;
+  const { lang } = useT();
+  const shownPersona = personaById(hover ?? bots[seat - 1])!;
+  const shown = shownPersona[lang];
 
   return (
     <div>
@@ -41,11 +44,11 @@ function PersonaGrid({
               className={`relative flex flex-col items-center rounded-xl p-1 pt-1.5 ring-1 transition ${
                 here ? "bg-amber-300/20 ring-2 ring-amber-300" : at ? "bg-black/30 ring-amber-200/20 opacity-70" : "bg-black/15 ring-amber-200/10 hover:bg-black/30"
               }`}
-              aria-label={`${p.title} wählen`}
+              aria-label={p[lang].title}
               aria-pressed={here}
             >
               <Character look={p.id} color={here || !at ? seat : at} size={52} />
-              <span className="mt-0.5 w-full truncate text-center text-[11px] font-bold leading-tight text-amber-50">{p.name}</span>
+              <span className="mt-0.5 w-full truncate text-center text-[11px] font-bold leading-tight text-amber-50">{p[lang].name}</span>
               {at > 0 && !here && (
                 <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full ring-1 ring-black/40" style={{ background: PLAYER_COLORS[at].hex }} />
               )}
@@ -56,7 +59,7 @@ function PersonaGrid({
 
       <AnimatePresence mode="wait">
         <motion.div
-          key={shown.id}
+          key={shownPersona.id}
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
@@ -92,12 +95,13 @@ export function PartnerPicker({ bots, onChange }: { bots: string[]; onChange: (b
 }
 
 const OPPONENT_SEATS = [
-  { seat: 1, label: "Gegner links" },
-  { seat: 3, label: "Gegner rechts" },
-];
+  { seat: 1, label: "opp.left" },
+  { seat: 3, label: "opp.right" },
+] as const;
 
 export function OpponentPicker({ bots, onChange }: { bots: string[]; onChange: (bots: string[]) => void }) {
   const [slot, setSlot] = useState(0);
+  const { t, lang } = useT();
   const seat = OPPONENT_SEATS[slot].seat;
 
   return (
@@ -121,9 +125,9 @@ export function OpponentPicker({ bots, onChange }: { bots: string[]; onChange: (
                 </motion.div>
               </AnimatePresence>
               <div className="min-w-0">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-amber-100/60">{s.label}</div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-amber-100/60">{t(s.label)}</div>
                 <div className="font-display text-stroke truncate rounded-md px-1.5 text-sm text-white" style={{ background: `linear-gradient(${col.light}, ${col.hex} 45%, ${col.dark})` }}>
-                  {p.title}
+                  {p[lang].title}
                 </div>
               </div>
             </button>

@@ -1,4 +1,5 @@
 // Zentrale Typen für TAC – angelehnt an die offizielle TACtik (TAC Verlag, 2024).
+import type { Phrase } from "@/lib/i18n";
 
 export type NumberValue = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 12 | 13;
 export type SpecialValue = "trickser" | "tac";
@@ -25,6 +26,16 @@ export interface Marble {
 }
 
 export type Difficulty = "easy" | "medium" | "hard";
+
+/** classic: du + Bot-Partner gegen 2 Bots · friends: Raum mit Freunden · oracle: du steuerst dich und den blinden Partner */
+export type GameMode = "classic" | "friends" | "oracle";
+
+/** Besetzung eines Platzes beim Spielstart. */
+export interface SeatSpec {
+  human: boolean;
+  name?: string;
+  persona?: string | null;
+}
 
 export interface Player {
   id: number;
@@ -66,7 +77,8 @@ export interface Move {
   board: Marble[];
   anims: MarbleAnim[];
   captured: number[];
-  label: string;
+  /** Beschreibung des Zugs – übersetzbarer Baustein */
+  label: Phrase;
   /** Für Klick-Steuerung: Hauptkugel und Zielposition. */
   marbleId?: number;
   target?: number;
@@ -93,7 +105,8 @@ export interface LogEntry {
   id: number;
   player: number | null;
   card?: CardValue;
-  text: string;
+  /** übersetzbarer Baustein (alte Spielstände: fertiger deutscher Text) */
+  text: Phrase;
   kind: LogKind;
 }
 
@@ -131,12 +144,15 @@ export interface GameState {
   noTacThisTurn: boolean;
   winner: number | null;
   master: boolean;
+  mode?: GameMode;
   log: LogEntry[];
   logCounter: number;
   lastMove: Move | null;
   moveCounter: number;
   /** Meldung nach dem Geben: kann eröffnen? */
   announcements: (boolean | null)[];
+  /** Orakel-Modus: Karten-IDs, die der Spieler gesehen hat – alle anderen Orakel-Karten liegen verdeckt. */
+  oracleKnown?: string[];
 }
 
 export interface GameSettings {
@@ -146,4 +162,7 @@ export interface GameSettings {
   speed: number; // 0.5 … 2 (Bot-Geschwindigkeit)
   /** Charaktere der Bots auf den Plätzen 1–3 (Platz 2 = Partner) */
   bots?: string[];
+  mode?: GameMode;
+  /** Freie Besetzung aller vier Plätze (Freunde-Modus); sonst ergibt sie sich aus Modus und bots */
+  seats?: SeatSpec[];
 }

@@ -20,6 +20,7 @@ import {
 } from "@/lib/layout";
 import { STEP_MS, type AnimSpec } from "@/store/gameStore";
 import { haptics } from "@/lib/haptics";
+import { useT } from "@/lib/useI18n";
 
 export interface BoardTarget {
   key: string;
@@ -224,6 +225,7 @@ export function Board({ marbles, anim, selectable, selected, targets, onMarbleCl
 
 /** Lupe über dem Finger: zeigt vergrößert, worauf man gerade zielt (der Finger verdeckt sonst die kleinen Felder). */
 function Loupe({ aim, boardPx }: { aim: Aim; boardPx: number }) {
+  const { t } = useT();
   const span = (LOUPE_PX * (SIZE / boardPx)) / LOUPE_ZOOM;
   const center = aim.cand?.point ?? { x: aim.x, y: aim.y };
   // Über dem Finger; ganz oben am Brett stattdessen daneben, damit die Lupe sichtbar bleibt
@@ -244,7 +246,7 @@ function Loupe({ aim, boardPx }: { aim: Aim; boardPx: number }) {
         <use href="#tac-board-layer" />
       </svg>
       {!aim.cand && (
-        <div className="absolute inset-x-0 bottom-3 text-center text-[10px] font-bold uppercase tracking-wider text-white drop-shadow">kein Ziel</div>
+        <div className="absolute inset-x-0 bottom-3 text-center text-[10px] font-bold uppercase tracking-wider text-white drop-shadow">{t("board.noTarget")}</div>
       )}
     </motion.div>
   );

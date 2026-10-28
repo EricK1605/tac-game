@@ -3,25 +3,26 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useAnimationControls } from "framer-motion";
-import { BookOpen, Home, RotateCcw, Trophy, Volume2, VolumeX } from "lucide-react";
+import { BookOpen, Eye, Home, RotateCcw, Trophy, Volume2, VolumeX } from "lucide-react";
 import type { GameState } from "@/types/game";
 import { useGameStore } from "@/store/gameStore";
-import { PLAYER_COLORS, TEAM_NAMES, isHome, teamOf } from "@/lib/engine/constants";
+import { PLAYER_COLORS, isHome, teamOf } from "@/lib/engine/constants";
 import { decider } from "@/lib/engine/moves";
 import { haptics } from "@/lib/haptics";
+import { relSeat, setViewSeat } from "@/lib/layout";
 import { lookOf } from "@/lib/personas";
+import { useGameText } from "@/lib/useI18n";
 import { AdSlot } from "./AdSlot";
 import { EmoteButton, FxOverlay, PlayerPlate, SidebarDrawer } from "./Arena";
 import { Board } from "./Board";
 import { CardFace } from "./CardView";
 import { Character } from "./Character";
 import { HandArea } from "./HandArea";
+import { LangSwitch } from "./LangSwitch";
 import { Sidebar } from "./Sidebar";
 import { useTurnControls } from "./useTurnControls";
 
-const DIFF_LABEL = { easy: "Leicht", medium: "Mittel", hard: "Schwer" } as const;
-
-export function GameScreen() {
+export function GameScreen({ onLeave }: { onLeave?: () => void }) {
   const game = useGameStore((s) => s.game)!;
   const anim = useGameStore((s) => s.anim);
   const sound = useGameStore((s) => s.sound);
@@ -29,13 +30,19 @@ export function GameScreen() {
   const setShowRules = useGameStore((s) => s.setShowRules);
   const quit = useGameStore((s) => s.quit);
   const settings = useGameStore((s) => s.settings);
+  const me = useGameStore((s) => s.mySeats[0] ?? 0);
+  // Der eigene Platz sitzt immer unten am Brett
+  setViewSeat(me);
   const controls = useTurnControls();
   const router = useRouter();
+  const { t } = useGameText(game);
   // Zurück ins Menü – der Spielstand bleibt gespeichert
-  const toMenu = () => {
-    router.push("/");
-    quit();
-  };
+  const toMenu =
+    onLeave ??
+    (() => {
+      router.push("/");
+      quit();
+    });
 
   const active = game.phase === "play" ? decider(game) : null;
   const fx = useGameStore((s) => s.fx);
@@ -44,7 +51,7 @@ export function GameScreen() {
   // Brett wackelt bei Rauswürfen und beim Spielende
   useEffect(() => {
     if (!fx || (fx.kind !== "kick" && fx.kind !== "win")) return;
-    const strong = fx.kind === "win" || fx.victims.includes(0);
+    const strong = fx.kind === "win" || fx.victims.includes(me);
     const a = strong ? 12 : 7;
     shake.start({ x: [0, -a, a, -a * 0.6, a * 0.6, -a * 0.3, 0], y: [0, a * 0.4, -a * 0.4, a * 0.2, 0], transition: { duration: 0.45 } });
   }, [fx?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -58,25 +65,30 @@ export function GameScreen() {
     <div className="flex min-h-dvh select-none flex-col">
       {/* Kopfzeile */}
       <header className="flex items-center justify-between gap-2 px-3 py-2 sm:px-5">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           <span className="font-display text-stroke-lg text-2xl text-amber-200 sm:text-3xl">
             T<span className="text-red-500">A</span>C
           </span>
-          <span className="font-display hidden rounded-lg border-2 border-[#1b1630] bg-black/40 px-2.5 py-1 text-xs text-amber-100/90 lg:inline">
-            Runde {game.dealNumber} · {DIFF_LABEL[settings.difficulty]}
-            {game.master ? " · Meisterversion" : ""}
-          </span>
+          {game.mode === "oracle" ? (
+            <OracleBadge />
+          ) : (
+            <span className="font-display hidden rounded-lg border-2 border-[#1b1630] bg-black/40 px-2.5 py-1 text-xs text-amber-100/90 lg:inline">
+              {t("hdr.round", { n: game.dealNumber })} · {t(`diff.${settings.difficulty}`)}
+              {game.master ? ` · ${t("hdr.master")}` : ""}
+            </span>
+          )}
         </div>
-        <TeamScore game={game} />
+        <TeamScore game={game} me={me} />
         <div className="flex items-center gap-1.5">
-          <IconButton onClick={() => setShowRules(true)} label="Regeln">
+          <LangSwitch className="hidden sm:flex" />
+          <IconButton onClick={() => setShowRules(true)} label={t("hdr.rules")}>
             <BookOpen className="h-4 w-4" />
-            <span className="hidden xl:inline">Wie spiele ich TAC?</span>
+            <span className="hidden 2xl:inline">{t("hdr.rules")}</span>
           </IconButton>
-          <IconButton onClick={toggleSound} label={sound ? "Ton aus" : "Ton an"}>
+          <IconButton onClick={toggleSound} label={sound ? t("hdr.soundOff") : t("hdr.soundOn")}>
             {sound ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
           </IconButton>
-          <IconButton onClick={toMenu} label="Hauptmenü">
+          <IconButton onClick={toMenu} label={t("hdr.menu")}>
             <Home className="h-4 w-4" />
           </IconButton>
         </div>
@@ -97,6 +109,7 @@ export function GameScreen() {
             <div className="relative my-[70px] w-full min-w-[300px] max-w-[min(98vw,calc(100dvh-380px))] md:max-w-[min(96vw,calc(100dvh-370px))] xl:my-1 xl:max-w-[min(calc(100%-340px),calc(100dvh-258px))]">
               <motion.div animate={shake}>
                 <Board
+                  key={me}
                   marbles={controls.displayBoard}
                   anim={anim}
                   selectable={controls.selectable}
@@ -109,7 +122,7 @@ export function GameScreen() {
                     <>
                       <CenterPile game={game} />
                       <FxOverlay game={game} />
-                      <TurnBanner game={game} humanTurn={controls.humanTurn} />
+                      <TurnBanner game={game} humanTurn={controls.humanTurn} me={me} />
                     </>
                   }
                 />
@@ -130,8 +143,23 @@ export function GameScreen() {
 
       <EmoteButton />
       <SidebarDrawer game={game} />
-      <AnimatePresence>{game.phase === "gameOver" && <GameOverModal game={game} />}</AnimatePresence>
+      <AnimatePresence>{game.phase === "gameOver" && <GameOverModal game={game} me={me} onLeave={toMenu} />}</AnimatePresence>
     </div>
+  );
+}
+
+/** Glühendes Abzeichen im Orakel-Modus. */
+export function OracleBadge() {
+  const { t } = useGameText(null);
+  return (
+    <motion.span
+      animate={{ boxShadow: ["0 0 8px #a855f7", "0 0 20px #c084fc", "0 0 8px #a855f7"] }}
+      transition={{ repeat: Infinity, duration: 2.2 }}
+      className="font-display text-stroke flex items-center gap-1 rounded-lg border-2 border-[#1b1630] bg-gradient-to-r from-purple-600 to-fuchsia-600 px-2 py-1 text-[11px] text-white sm:text-xs"
+    >
+      <Eye className="h-3.5 w-3.5" />
+      <span className="hidden sm:inline">{t("oracle.badge")}</span>
+    </motion.span>
   );
 }
 
@@ -151,56 +179,63 @@ function IconButton({ children, onClick, label }: { children: React.ReactNode; o
   );
 }
 
-/** Fortschritt beider Teams – auf dem Handy als kompakte Zahl, ab sm mit acht Lichtpunkten. */
-function TeamScore({ game }: { game: GameState }) {
+/** Fortschritt beider Teams – eigenes Team zuerst. Auf dem Handy als kompakte Zahl, ab sm mit acht Lichtpunkten. */
+function TeamScore({ game, me }: { game: GameState; me: number }) {
+  const { t } = useGameText(game);
   const count = (team: number) => game.marbles.filter((m) => teamOf(m.color) === team && isHome(m.pos)).length;
+  const mine = teamOf(me);
   return (
     <div className="flex items-center gap-1.5 text-xs font-semibold sm:gap-3 sm:text-sm">
-      {[0, 1].map((t) => (
-        <div
-          key={t}
-          className={`flex items-center gap-1.5 rounded-full px-2 py-1 sm:gap-2 sm:px-3 ${t === 0 ? "bg-emerald-950/50" : "bg-blue-950/50"} ring-1 ring-amber-200/10`}
-          title={t === 0 ? "Dein Team" : "Gegner"}
-        >
-          <span className="flex -space-x-1">
-            <span className="h-3 w-3 rounded-full ring-1 ring-black/40" style={{ background: PLAYER_COLORS[t].hex }} />
-            <span className="h-3 w-3 rounded-full ring-1 ring-black/40" style={{ background: PLAYER_COLORS[t + 2].hex }} />
-          </span>
-          <span className="hidden text-amber-100/80 md:inline">{t === 0 ? "Dein Team" : "Gegner"}</span>
-          <span className="font-display text-amber-100 sm:hidden">{count(t)}/8</span>
-          <span className="hidden gap-0.5 sm:flex">
-            {Array.from({ length: 8 }, (_, i) => (
-              <motion.span
-                key={i}
-                animate={i < count(t) ? { scale: [1.8, 1] } : { scale: 1 }}
-                className={`h-2 w-2 rounded-full ${i < count(t) ? "bg-amber-300 shadow-[0_0_6px_#fcd34d]" : "bg-white/15"}`}
-              />
-            ))}
-          </span>
-        </div>
-      ))}
+      {[mine, 1 - mine].map((team) => {
+        const label = team === mine ? t("score.mine") : t("score.them");
+        return (
+          <div
+            key={team}
+            className={`flex items-center gap-1.5 rounded-full px-2 py-1 sm:gap-2 sm:px-3 ${team === mine ? "bg-emerald-950/50" : "bg-blue-950/50"} ring-1 ring-amber-200/10`}
+            title={label}
+          >
+            <span className="flex -space-x-1">
+              <span className="h-3 w-3 rounded-full ring-1 ring-black/40" style={{ background: PLAYER_COLORS[team].hex }} />
+              <span className="h-3 w-3 rounded-full ring-1 ring-black/40" style={{ background: PLAYER_COLORS[team + 2].hex }} />
+            </span>
+            <span className="hidden text-amber-100/80 md:inline">{label}</span>
+            <span className="font-display text-amber-100 sm:hidden">{count(team)}/8</span>
+            <span className="hidden gap-0.5 sm:flex">
+              {Array.from({ length: 8 }, (_, i) => (
+                <motion.span
+                  key={i}
+                  animate={i < count(team) ? { scale: [1.8, 1] } : { scale: 1 }}
+                  className={`h-2 w-2 rounded-full ${i < count(team) ? "bg-amber-300 shadow-[0_0_6px_#fcd34d]" : "bg-white/15"}`}
+                />
+              ))}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-/** Banner über dem Brett: „Runde n“ nach dem Geben und „Dein Zug!“, sobald du dran bist. */
-function TurnBanner({ game, humanTurn }: { game: GameState; humanTurn: boolean }) {
+/** Banner über dem Brett: „Runde n“ nach dem Geben und „Dein Zug!“ bzw. „Zug des Orakels!“, sobald du dran bist. */
+function TurnBanner({ game, humanTurn, me }: { game: GameState; humanTurn: boolean; me: number }) {
+  const { t } = useGameText(game);
   const [banner, setBanner] = useState<{ key: string; text: string; sub?: string } | null>(null);
 
   useEffect(() => {
     if (game.dealNumber < 1) return;
-    setBanner({ key: `deal-${game.dealNumber}`, text: `Runde ${game.dealNumber}`, sub: "Gib deinem Partner eine Karte" });
-  }, [game.dealNumber]);
+    setBanner({ key: `deal-${game.dealNumber}`, text: t("banner.round", { n: game.dealNumber }), sub: t("banner.swap") });
+  }, [game.dealNumber]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!humanTurn || game.phase !== "play") return;
-    setBanner({ key: `turn-${game.moveCounter}`, text: "Dein Zug!" });
-  }, [humanTurn, game.phase]); // eslint-disable-line react-hooks/exhaustive-deps
+    const oracle = decider(game) !== me;
+    setBanner({ key: `turn-${game.moveCounter}`, text: t(oracle ? "banner.oracleTurn" : "banner.yourTurn") });
+  }, [humanTurn, game.phase, game.mode === "oracle" ? game.current : 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!banner) return;
-    const t = setTimeout(() => setBanner(null), banner.sub ? 1600 : 1100);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setBanner(null), banner.sub ? 1600 : 1100);
+    return () => clearTimeout(timer);
   }, [banner]);
 
   return (
@@ -232,45 +267,50 @@ function hashRot(id: string) {
   return (h % 24) - 12;
 }
 
+/** Ablagestapel in der Brettmitte – Karten fliegen aus der Richtung des Spielers herein. */
 function CenterPile({ game }: { game: GameState }) {
   const pile = game.discardPile.slice(-4);
   return (
     <div className="pointer-events-none absolute left-1/2 top-1/2 h-[24%] w-[24%] -translate-x-1/2 -translate-y-1/2">
       <div className="relative flex h-full w-full items-center justify-center">
         <AnimatePresence>
-          {pile.map((e, i) => (
-            <motion.div
-              key={e.card.id}
-              initial={{ opacity: 0, scale: 1.6, y: e.player === 0 ? 160 : e.player === 2 ? -160 : 0, x: e.player === 1 ? -160 : e.player === 3 ? 160 : 0 }}
-              animate={{ opacity: 1, scale: 1, y: 0, x: 0, rotate: hashRot(e.card.id) }}
-              exit={{ opacity: 0 }}
-              transition={{ type: "spring", stiffness: 200, damping: 22 }}
-              className="absolute"
-              style={{ zIndex: i }}
-            >
-              <div className="scale-[0.5] sm:scale-[0.6] lg:scale-[0.72]">
-                <CardFace value={e.card.value} size="md" />
-              </div>
-              {i === pile.length - 1 && (
-                <span
-                  className="absolute -bottom-1 left-1/2 h-2 w-8 -translate-x-1/2 rounded-full"
-                  style={{ background: PLAYER_COLORS[e.player].hex, boxShadow: `0 0 10px ${PLAYER_COLORS[e.player].hex}` }}
-                />
-              )}
-            </motion.div>
-          ))}
+          {pile.map((e, i) => {
+            const r = relSeat(e.player);
+            return (
+              <motion.div
+                key={e.card.id}
+                initial={{ opacity: 0, scale: 1.6, y: r === 0 ? 160 : r === 2 ? -160 : 0, x: r === 1 ? -160 : r === 3 ? 160 : 0 }}
+                animate={{ opacity: 1, scale: 1, y: 0, x: 0, rotate: hashRot(e.card.id) }}
+                exit={{ opacity: 0 }}
+                transition={{ type: "spring", stiffness: 200, damping: 22 }}
+                className="absolute"
+                style={{ zIndex: i }}
+              >
+                <div className="scale-[0.5] sm:scale-[0.6] lg:scale-[0.72]">
+                  <CardFace value={e.card.value} size="md" />
+                </div>
+                {i === pile.length - 1 && (
+                  <span
+                    className="absolute -bottom-1 left-1/2 h-2 w-8 -translate-x-1/2 rounded-full"
+                    style={{ background: PLAYER_COLORS[e.player].hex, boxShadow: `0 0 10px ${PLAYER_COLORS[e.player].hex}` }}
+                  />
+                )}
+              </motion.div>
+            );
+          })}
         </AnimatePresence>
       </div>
     </div>
   );
 }
 
-function GameOverModal({ game }: { game: GameState }) {
+function GameOverModal({ game, me, onLeave }: { game: GameState; me: number; onLeave: () => void }) {
   const start = useGameStore((s) => s.start);
   const settings = useGameStore((s) => s.settings);
-  const quit = useGameStore((s) => s.quit);
   const router = useRouter();
-  const won = game.winner === 0;
+  const { t } = useGameText(game);
+  const won = game.winner === teamOf(me);
+  const team = t(game.winner === 1 ? "team.1" : "team.0");
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
       <motion.div
@@ -286,22 +326,20 @@ function GameOverModal({ game }: { game: GameState }) {
           </motion.div>
           <MoodLoop game={game} player={(game.winner ?? 0) + 2} />
         </div>
-        <h2 className="font-display text-stroke-lg text-5xl text-amber-200">{won ? "Gewonnen!" : "Verloren"}</h2>
+        <h2 className="font-display text-stroke-lg text-5xl text-amber-200">{won ? t("over.won") : t("over.lost")}</h2>
         <p className="mt-2 text-amber-100/70">
-          {TEAM_NAMES[game.winner ?? 0]} hat alle acht Kugeln nach Hause gebracht{won ? " – starkes Teamspiel!" : "."}
+          {t("over.text", { team })}
+          {won ? t("over.teamwork") : "."}
         </p>
         <div className="mt-6 flex justify-center gap-3">
-          <button onClick={() => router.replace(`/spiel/${start(settings)}`)} className="chunky-btn chunky-green flex items-center gap-2 rounded-2xl px-6 py-3 text-lg">
-            <RotateCcw className="h-4 w-4" /> Nochmal
-          </button>
-          <button
-            onClick={() => {
-              router.push("/");
-              quit();
-            }}
-            className="chunky-btn chunky-dark rounded-2xl px-6 py-3 text-lg"
-          >
-            Hauptmenü
+          {/* Im Freunde-Modus startet der Gastgeber neu über die Lobby */}
+          {game.mode !== "friends" && (
+            <button onClick={() => router.replace(`/spiel/${start(settings)}`)} className="chunky-btn chunky-green flex items-center gap-2 rounded-2xl px-6 py-3 text-lg">
+              <RotateCcw className="h-4 w-4" /> {t("over.again")}
+            </button>
+          )}
+          <button onClick={onLeave} className="chunky-btn chunky-dark rounded-2xl px-6 py-3 text-lg">
+            {t("over.menu")}
           </button>
         </div>
       </motion.div>

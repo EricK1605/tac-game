@@ -12,8 +12,17 @@ const BASE_SPREAD = 26;
 
 const rad = (deg: number) => (deg * Math.PI) / 180;
 
-/** Winkel des Kreisfelds i – Spieler 0 unten, im Uhrzeigersinn. */
-export const ringAngle = (i: number) => 90 + i * (360 / 64);
+/** Platz, der unten am Brett sitzt (Freunde-Modus: jeder sieht sich selbst unten). */
+let viewSeat = 0;
+export function setViewSeat(seat: number) {
+  viewSeat = seat;
+}
+
+/** Platz eines Spielers aus Sicht des Betrachters: 0 = unten, 1 = links, 2 = oben, 3 = rechts. */
+export const relSeat = (player: number) => (player - viewSeat + 4) % 4;
+
+/** Winkel des Kreisfelds i – der Betrachter unten, im Uhrzeigersinn. */
+export const ringAngle = (i: number) => 90 + i * (360 / 64) - viewSeat * 90;
 
 export interface Pt {
   x: number;

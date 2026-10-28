@@ -152,6 +152,21 @@ const LOOKS: Record<LookId, Look> = {
       </g>
     ),
   },
+  orakel: {
+    skin: "#e8dcf5",
+    back: () => <path d="M18 70 Q14 30 50 14 Q86 30 82 70 Q72 54 50 52 Q28 54 18 70 Z" fill="#4c1d95" {...o} />,
+    over: (c) => (
+      <g>
+        <path d="M24 42 Q24 16 50 14 Q76 16 76 42 Q66 26 50 26 Q34 26 24 42 Z" fill="#6d28d9" {...o} />
+        {/* Augenbinde – das Orakel ist blind */}
+        <path d="M24 40 Q50 36 76 40 L76 50 Q50 46 24 50 Z" fill={c.hex} {...o} strokeWidth={3} />
+        <path d="M76 44 Q86 46 90 56 M76 47 Q82 54 82 62" fill="none" stroke={c.hex} strokeWidth={3.5} strokeLinecap="round" />
+        {/* drittes Auge */}
+        <circle cx={50} cy={30} r={4.5} fill="#fde047" stroke={OUTLINE} strokeWidth={2} />
+        <circle cx={50} cy={30} r={1.8} fill={OUTLINE} />
+      </g>
+    ),
+  },
   ninja: {
     skin: "#f7c9a3",
     over: (c) => (

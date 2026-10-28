@@ -12,6 +12,8 @@ export interface SaveFile {
   settings: GameSettings;
   game: GameState;
   chat: ChatMessage[];
+  /** Plätze, die an diesem Gerät gespielt werden (Orakel: 0 und 2) */
+  mySeats?: number[];
   savedAt: number;
 }
 
@@ -46,7 +48,8 @@ export function lastOpenSave(): SaveFile | null {
   try {
     const id = storage()?.getItem(LAST_KEY);
     const save = id ? readSave(id) : null;
-    return save && save.game.phase !== "gameOver" ? save : null;
+    // Freunde-Partien laufen nur im Raum weiter (/raum/<code>), nicht als Einzelspiel
+    return save && save.game.phase !== "gameOver" && save.game.mode !== "friends" ? save : null;
   } catch {
     return null;
   }
@@ -61,14 +64,37 @@ export function readSettings(): GameSettings | null {
   }
 }
 
-export function persist({ game, gameId, chat, settings }: { game: GameState | null; gameId: string | null; chat: ChatMessage[]; settings: GameSettings }) {
+/** Einstellungen (z. B. den Namen) schon vor einem Spiel merken – etwa beim Betreten eines Raums. */
+export function rememberSettings(partial: Partial<GameSettings>) {
+  const st = storage();
+  if (!st) return;
+  try {
+    st.setItem(SETTINGS_KEY, JSON.stringify({ ...(readSettings() ?? {}), ...partial }));
+  } catch {
+    /* ohne Speicher eben nicht */
+  }
+}
+
+export function persist({
+  game,
+  gameId,
+  chat,
+  settings,
+  mySeats,
+}: {
+  game: GameState | null;
+  gameId: string | null;
+  chat: ChatMessage[];
+  settings: GameSettings;
+  mySeats: number[];
+}) {
   const st = storage();
   if (!st) return;
   try {
     // Ohne laufendes Spiel nichts schreiben – sonst überschreiben Standardwerte beim Neuladen die gespeicherten Einstellungen
     if (!game || !gameId) return;
     st.setItem(SETTINGS_KEY, JSON.stringify(settings));
-    const save: SaveFile = { v: 1, id: gameId, settings, game, chat: chat.slice(-40), savedAt: Date.now() };
+    const save: SaveFile = { v: 1, id: gameId, settings, game, chat: chat.slice(-40), mySeats, savedAt: Date.now() };
     st.setItem(SAVE_PREFIX + gameId, JSON.stringify(save));
     st.setItem(LAST_KEY, gameId);
     prune(st, gameId);
