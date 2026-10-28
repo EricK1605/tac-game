@@ -50,7 +50,7 @@ const STRUCTURED_DATA = [
 
 export function SeoSection({ withSchema = false }: { withSchema?: boolean }) {
   return (
-    <section id="ueber-tac" className="px-3 pb-28 pt-6 sm:px-6 lg:pb-16">
+    <section id="ueber-tac" className="px-3 pt-6 sm:px-6">
       {withSchema && <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }} />}
       <article className="mx-auto max-w-4xl rounded-3xl border border-amber-200/10 bg-black/30 p-6 leading-relaxed text-amber-50/85 shadow-xl backdrop-blur-sm sm:p-10">
         <h1 className="font-display text-stroke text-3xl text-amber-200 sm:text-4xl">TAC Spiel Online Kostenlos Spielen</h1>
@@ -93,10 +93,6 @@ export function SeoSection({ withSchema = false }: { withSchema?: boolean }) {
           Unser <strong className="text-amber-100">Taktikspiel im Browser</strong> läuft ohne Download und ohne Konto. Wähle aus acht Computer-Charakteren – vom angriffslustigen
           Wikinger bis zur vorsichtigen Strickoma – und stelle die Schwierigkeit von Leicht bis Schwer ein. Hinweise erklären dir jeden möglichen Zug, und dank automatischer
           Speicherung spielst du jederzeit dort weiter, wo du aufgehört hast.
-        </p>
-
-        <p className="mt-8 border-t border-amber-200/10 pt-4 text-xs text-amber-100/40">
-          Fan-Umsetzung nach den offiziellen Spielregeln. Dieses Projekt steht in keiner Verbindung zum TAC Verlag; „TAC“ ist eine Marke des jeweiligen Rechteinhabers.
         </p>
       </article>
     </section>

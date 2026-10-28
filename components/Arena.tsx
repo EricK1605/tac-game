@@ -106,7 +106,7 @@ export function PlayerPlate({ game, player, active }: { game: GameState; player:
               <Flag className="h-2.5 w-2.5" strokeWidth={3} />
             </span>
           )}
-          <EmoteBubble player={player} />
+          <EmotePulse player={player} color={col.hex} />
         </div>
 
         <div className={`flex min-w-0 flex-col ${right ? "items-end" : "items-start"} xl:items-center`}>
@@ -180,53 +180,47 @@ function ThinkingDots() {
   );
 }
 
-/** Emote springt am Avatar auf – Richtung Brett, damit es keine Namen verdeckt. */
-function EmoteBubble({ player }: { player: number }) {
+/**
+ * Emote: Die Figur im Avatar spielt es selbst – dazu nur ein kurzer Ring, der vom Avatar wegpulsiert.
+ * Eine zweite Figur in einer Blase wäre doppelt und würde am Handy aufs Brett ragen.
+ */
+function EmotePulse({ player, color }: { player: number; color: string }) {
   const last = useGameStore((s) => {
     for (let i = s.emotes.length - 1; i >= 0; i--) if (s.emotes[i].player === player) return s.emotes[i];
     return null;
   });
-  const [shown, setShown] = useState<{ id: number; emote: EmoteId } | null>(null);
-  const look = useGameStore((s) => lookOf(s.game?.players[player].persona));
-  const down = isTopSeat(player);
-  const right = isRightSeat(player);
+  const [shown, setShown] = useState<number | null>(null);
 
   useEffect(() => {
     if (!last || Date.now() - last.time > 2500) return;
-    setShown({ id: last.id, emote: last.emote });
-    const t = setTimeout(() => setShown(null), 2200);
+    setShown(last.id);
+    const t = setTimeout(() => setShown(null), 1300);
     return () => clearTimeout(t);
   }, [last?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <AnimatePresence>
-      {shown && (
-        <motion.div
-          key={shown.id}
-          initial={{ scale: 0, y: down ? -16 : 16, rotate: -20 }}
-          animate={{ scale: [0, 1.3, 1], y: 0, rotate: [-20, 10, 0] }}
-          exit={{ scale: 0, opacity: 0, transition: { duration: 0.18 } }}
-          transition={{ duration: 0.45, ease: "easeOut" }}
-          // Schmal: über/unter dem Avatar Richtung Brett. Breit (Karten neben dem Brett): seitlich Richtung Brett.
-          className={`absolute left-1/2 z-30 -translate-x-1/2 ${down ? "top-full mt-1" : "bottom-full mb-1"} xl:bottom-auto xl:top-1/2 xl:my-0 xl:-translate-y-1/2 xl:translate-x-0 ${
-            right ? "xl:left-auto xl:right-[calc(100%+10px)]" : "xl:left-[calc(100%+10px)]"
-          }`}
-        >
-          <div className="relative flex h-14 w-14 items-center justify-center rounded-2xl border-[3px] border-[#1b1630] bg-white shadow-[0_4px_0_rgba(0,0,0,0.4)] sm:h-16 sm:w-16">
-            <Character look={look} color={player} mood={shown.emote} size={40} className="-mt-1" />
-            <span
-              className={`absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border-[#1b1630] bg-white xl:hidden ${
-                down ? "-top-[8px] border-l-[3px] border-t-[3px]" : "-bottom-[8px] border-b-[3px] border-r-[3px]"
-              }`}
-            />
-          </div>
-        </motion.div>
-      )}
+      {shown !== null &&
+        [0, 0.35].map((delay) => (
+          <motion.span
+            key={`${shown}-${delay}`}
+            aria-hidden
+            className="pointer-events-none absolute inset-0 rounded-full border-[3px]"
+            style={{ borderColor: color }}
+            initial={{ scale: 1, opacity: 0.9 }}
+            animate={{ scale: 1.7, opacity: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.9, delay, ease: "easeOut" }}
+          />
+        ))}
     </AnimatePresence>
   );
 }
 
-/** Text-Nachrichten der Bots als Blase unter bzw. über der Spielerkarte – versetzt zum Emote. */
+/**
+ * Text-Nachrichten als Sprechblase. Am Handy liegt sie in der Spielerkarte über Name und Titel – so ragt sie nicht aufs Brett.
+ * Breit (Karten neben dem Brett) sitzt sie unter bzw. über der Karte.
+ */
 function ChatBubble({ player }: { player: number }) {
   const last = useGameStore((s) => {
     for (let i = s.chat.length - 1; i >= 0; i--) if (s.chat[i].player === player) return s.chat[i];
@@ -239,7 +233,7 @@ function ChatBubble({ player }: { player: number }) {
   useEffect(() => {
     if (!last || Date.now() - last.time > 4000) return;
     setBubble({ id: last.id, text: last.text });
-    const t = setTimeout(() => setBubble(null), 3200);
+    const t = setTimeout(() => setBubble(null), 3000);
     return () => clearTimeout(t);
   }, [last?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -248,17 +242,25 @@ function ChatBubble({ player }: { player: number }) {
       {bubble && (
         <motion.div
           key={bubble.id}
-          initial={{ opacity: 0, scale: 0.6, y: down ? -8 : 8 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.8 }}
-          transition={{ type: "spring", stiffness: 400, damping: 22 }}
-          className={`absolute z-30 w-max max-w-[170px] rounded-2xl border-2 border-[#1b1630] bg-white px-3 py-1.5 text-xs font-bold leading-snug text-stone-800 shadow-[0_4px_0_rgba(0,0,0,0.35)] ${
-            down ? "top-full mt-2" : "bottom-full mb-2"
-          } ${right ? "right-14 origin-top-right xl:right-auto xl:left-1/2 xl:-translate-x-1/2" : "left-14 origin-top-left xl:left-1/2 xl:-translate-x-1/2"}`}
+          initial={{ opacity: 0, scale: 0.85 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.92, transition: { duration: 0.2 } }}
+          transition={{ type: "spring", stiffness: 380, damping: 26 }}
+          className={`absolute z-30 flex items-center rounded-xl border-2 border-[#1b1630] bg-white px-2 py-0.5 text-[10.5px] font-bold leading-[1.15] text-stone-800 shadow-[0_3px_0_rgba(0,0,0,0.3)] ${
+            right ? "left-1 right-[3.3rem] origin-right" : "left-[3.3rem] right-1 origin-left"
+          } inset-y-1 xl:inset-y-auto xl:left-1/2 xl:right-auto xl:w-max xl:max-w-[170px] xl:-translate-x-1/2 xl:rounded-2xl xl:px-3 xl:py-1.5 xl:text-xs xl:leading-snug ${
+            down ? "xl:top-full xl:mt-2" : "xl:bottom-full xl:mb-2"
+          }`}
         >
-          {bubble.text}
+          <span className="line-clamp-3 xl:line-clamp-none">{bubble.text}</span>
+          {/* Spitze: am Handy zum Avatar, breit zur Karte */}
           <span
-            className={`absolute h-2.5 w-2.5 rotate-45 border-[#1b1630] bg-white ${right ? "right-4" : "left-4"} xl:left-1/2 xl:right-auto xl:-translate-x-1/2 ${
+            className={`absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rotate-45 border-[#1b1630] bg-white xl:hidden ${
+              right ? "-right-[7px] border-r-2 border-t-2" : "-left-[7px] border-b-2 border-l-2"
+            }`}
+          />
+          <span
+            className={`absolute left-1/2 hidden h-2.5 w-2.5 -translate-x-1/2 rotate-45 border-[#1b1630] bg-white xl:block ${
               down ? "-top-[7px] border-l-2 border-t-2" : "-bottom-[7px] border-b-2 border-r-2"
             }`}
           />

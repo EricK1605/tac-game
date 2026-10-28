@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Lilita_One } from "next/font/google";
 import Script from "next/script";
 import { Providers } from "@/components/Providers";
+import { SiteFooter } from "@/components/SiteFooter";
 import { ADSENSE_CLIENT, SITE_URL } from "@/lib/site";
 import "./globals.css";
 
@@ -57,7 +58,10 @@ export default function RootLayout({
   return (
     <html lang="de">
       <body className={`${geistSans.variable} ${display.variable} antialiased`}>
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          <SiteFooter />
+        </Providers>
         {/* Google AdSense – lädt nach der Interaktivität der Seite, blockiert also das Spiel nicht */}
         <Script
           async
