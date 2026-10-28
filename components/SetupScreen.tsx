@@ -18,6 +18,7 @@ import { Character } from "./Character";
 import { OpponentPicker, PartnerPicker } from "./CharacterPicker";
 import { LangSwitch } from "./LangSwitch";
 import { OracleBadge } from "./GameScreen";
+import { ShareGame } from "./ShareGame";
 
 const LEVELS: { id: Difficulty; icon: React.ReactNode }[] = [
   { id: "easy", icon: <Sparkles className="h-5 w-5" /> },
@@ -300,9 +301,13 @@ function TitleScreen({
         </div>
       </div>
 
-      <button onClick={onRules} className="chunky-btn chunky-dark flex w-full max-w-sm items-center justify-center gap-2 rounded-2xl py-3">
-        <BookOpen className="h-5 w-5" /> {t("setup.rules")}
-      </button>
+      {/* Regeln plus Teilen in einer Zeile – so bleibt die Startseite kompakt */}
+      <div className="flex w-full max-w-sm gap-2">
+        <button onClick={onRules} className="chunky-btn chunky-dark flex min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl py-3">
+          <BookOpen className="h-5 w-5" /> {t("setup.rules")}
+        </button>
+        <ShareGame compact />
+      </div>
       {/* Auf niedrigen Bildschirmen weichen die Figuren, damit „Mehr über TAC“ sichtbar bleibt */}
       <div className="flex -space-x-2 [@media(max-height:860px)]:hidden">
         {PERSONAS.map((p, i) => (

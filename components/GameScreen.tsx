@@ -19,6 +19,7 @@ import { CardFace } from "./CardView";
 import { Character } from "./Character";
 import { HandArea } from "./HandArea";
 import { LangSwitch } from "./LangSwitch";
+import { ShareGame } from "./ShareGame";
 import { Sidebar } from "./Sidebar";
 import { useTurnControls } from "./useTurnControls";
 
@@ -373,6 +374,9 @@ function GameOverModal({ game, me, onLeave }: { game: GameState; me: number; onL
             {t("over.menu")}
           </button>
         </div>
+        {/* Nach der Partie ist der beste Moment, Freunde einzuladen */}
+        <p className="mt-6 text-sm text-amber-100/60">{t("share.invite")}</p>
+        <ShareGame className="mt-2" />
       </motion.div>
     </motion.div>
   );
