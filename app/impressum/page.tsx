@@ -3,33 +3,30 @@ import { LegalPage } from "@/components/LegalPage";
 
 export const metadata: Metadata = { title: "Impressum", robots: { index: false, follow: true } };
 
-// Platzhalter in [eckigen Klammern] vor der Veröffentlichung ausfüllen
 export default function Impressum() {
   return (
     <LegalPage title="Impressum">
       <h2>Angaben gemäß § 5 DDG</h2>
       <p>
-        [Vorname Nachname]
+        Eric Kleinkoenen
         <br />
-        [Straße Hausnummer]
+        Griegstraße 15
         <br />
-        [PLZ Ort]
+        80807 München
         <br />
         Deutschland
       </p>
 
       <h2>Kontakt</h2>
       <p>
-        E-Mail: [E-Mail-Adresse]
-        <br />
-        Telefon: [Telefonnummer – optional]
+        E-Mail: wohnungssucheeric-TacGame@yahoo.com
       </p>
 
       <h2>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
       <p>
-        [Vorname Nachname]
+        Eric Kleinkoenen
         <br />
-        [Anschrift wie oben]
+        Griegstraße 15, 80807 München
       </p>
 
       <h2>Hinweis zur Unabhängigkeit</h2>

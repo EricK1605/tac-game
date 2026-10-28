@@ -3,7 +3,6 @@ import { LegalPage } from "@/components/LegalPage";
 
 export const metadata: Metadata = { title: "Datenschutzerklärung", robots: { index: false, follow: true } };
 
-// Platzhalter in [eckigen Klammern] vor der Veröffentlichung ausfüllen
 export default function Datenschutz() {
   return (
     <LegalPage title="Datenschutzerklärung">
@@ -11,9 +10,9 @@ export default function Datenschutz() {
       <p>
         Verantwortlich für die Datenverarbeitung auf dieser Website im Sinne der Datenschutz-Grundverordnung (DSGVO) ist:
         <br />
-        [Vorname Nachname], [Straße Hausnummer], [PLZ Ort], Deutschland
+        Eric Kleinkoenen, Griegstraße 15, 80807 München, Deutschland
         <br />
-        E-Mail: [E-Mail-Adresse]
+        E-Mail: wohnungssucheeric-TacGame@yahoo.com
       </p>
 
       <h2>2. Überblick</h2>
@@ -57,9 +56,9 @@ export default function Datenschutz() {
       <h2>5. Mehrspieler-Modus „Mit Freunden spielen“</h2>
       <p>
         Wenn du einen Spielraum erstellst oder einem Raum beitrittst, werden die Spielzüge in Echtzeit zwischen den Geräten der Mitspielenden übertragen. Dafür nutzen wir den Dienst
-        Supabase Realtime der Supabase Inc. ([Anschrift laut supabase.com/privacy]). Verarbeitet werden dabei der Raumcode, der von dir gewählte Spielername, deine
-        Spielaktionen, Emotes und Chat-Nachrichten sowie technisch bedingt deine IP-Adresse. Die Daten werden nur für die Dauer der Verbindung übertragen und nicht dauerhaft in
-        einer Datenbank gespeichert. Serverstandort: [Region des Supabase-Projekts, z. B. EU (Frankfurt)].
+        Supabase Realtime des Anbieters Supabase Inc. Verarbeitet werden dabei der Raumcode, der von dir gewählte Spielername, deine Spielaktionen, Emotes und Chat-Nachrichten
+        sowie technisch bedingt deine IP-Adresse. Die Daten werden nur für die Dauer der Verbindung übertragen und nicht dauerhaft in einer Datenbank gespeichert. Eine
+        Übermittlung in Drittländer wie die USA ist dabei nicht ausgeschlossen; sie erfolgt auf Grundlage der EU-Standardvertragsklauseln.
       </p>
       <p>
         Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO, da die Verarbeitung für das von dir gewählte gemeinsame Spiel erforderlich ist. Weitere Informationen:{" "}
